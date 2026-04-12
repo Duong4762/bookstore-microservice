@@ -1,0 +1,102 @@
+{% extends 'gateway/base.html' %}
+
+{% block title %}Giỏ hàng - Bookstore{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h1 class="display-5 mb-4">
+        <i class="bi bi-cart"></i> Giỏ hàng của bạn
+    </h1>
+
+    {% if cart and cart.items %}
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Sản phẩm trong giỏ hàng</h5>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Sản phẩm</th>
+                                        <th>Giá</th>
+                                        <th>Số lượng</th>
+                                        <th>Tổng</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in cart.items %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ item.book_title }}</strong><br>
+                                                <small class="text-muted">ID: {{ item.book_id }}</small>
+                                            </td>
+                                            <td>{{ item.price|floatformat:0 }} VNĐ</td>
+                                            <td>{{ item.quantity }}</td>
+                                            <td><strong>{{ item.subtotal|floatformat:0 }} VNĐ</strong></td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Tóm tắt đơn hàng</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Tổng số sản phẩm:</span>
+                            <strong>{{ cart.total_items }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3">
+                            <span>Tổng tiền:</span>
+                            <strong class="text-danger fs-5">{{ cart.total_price|floatformat:0 }} VNĐ</strong>
+                        </div>
+                        
+                        <hr>
+                        
+                        <form method="POST" action="{% url 'create_order' %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="customer_id" value="{{ customer_id }}">
+                            <input type="hidden" name="cart_id" value="{{ cart.id }}">
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Địa chỉ giao hàng: <span class="text-danger">*</span></label>
+                                <textarea name="shipping_address" class="form-control" rows="3" required></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Số điện thoại: <span class="text-danger">*</span></label>
+                                <input type="tel" name="phone_number" class="form-control" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Ghi chú:</label>
+                                <textarea name="notes" class="form-control" rows="2"></textarea>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <i class="bi bi-check-circle"></i> Đặt hàng
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-cart-x"></i> Giỏ hàng của bạn đang trống.
+        </div>
+        <a href="{% url 'home' %}" class="btn btn-primary">
+            <i class="bi bi-arrow-left"></i> Tiếp tục mua sắm
+        </a>
+    {% endif %}
+</div>
+{% endblock %}

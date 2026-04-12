@@ -1,0 +1,201 @@
+services:
+  # Customer Service - Port 8001
+  customer-service:
+    build:
+      context: .
+      dockerfile: customer_service/Dockerfile
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./customer_service:/app
+    environment:
+      - DEBUG=True
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Product Service (DDD) - Port 8002
+  product-service:
+    build:
+      context: .
+      dockerfile: product_service/Dockerfile
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./product_service:/app
+    environment:
+      - DEBUG=True
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+    command: python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev
+
+  # Cart Service - Port 8003
+  cart-service:
+    build:
+      context: .
+      dockerfile: cart_service/Dockerfile
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./cart_service:/app
+    environment:
+      - DEBUG=True
+    depends_on:
+      - product-service
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Order Service - Port 8004
+  order-service:
+    build:
+      context: .
+      dockerfile: order_service/Dockerfile
+    ports:
+      - "8004:8000"
+    volumes:
+      - ./order_service:/app
+    environment:
+      - DEBUG=True
+    depends_on:
+      - cart-service
+      - payment-service
+      - shipping-service
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Payment Service - Port 8005
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment_service/Dockerfile
+    ports:
+      - "8005:8000"
+    volumes:
+      - ./payment_service:/app
+    environment:
+      - DEBUG=True
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Shipping Service - Port 8006
+  shipping-service:
+    build:
+      context: .
+      dockerfile: shipping_service/Dockerfile
+    ports:
+      - "8006:8000"
+    volumes:
+      - ./shipping_service:/app
+    environment:
+      - DEBUG=True
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Comment and Rating Service - Port 8007
+  rating-service:
+    build:
+      context: .
+      dockerfile: comment_and_rating_service/Dockerfile
+    ports:
+      - "8007:8000"
+    volumes:
+      - ./comment_and_rating_service:/app
+    environment:
+      - DEBUG=True
+    depends_on:
+      - product-service
+      - customer-service
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # ── AI Recommendation Service - Port 8008 ────────────────────────────────
+  recommender-service:
+    build:
+      context: .
+      dockerfile: recommender_ai_service/Dockerfile
+    ports:
+      - "8008:8000"
+    volumes:
+      - ./recommender_ai_service:/app
+    environment:
+      - DEBUG=True
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - PRODUCT_SERVICE_URL=http://product-service:8000
+    depends_on:
+      - redis
+      - product-service
+    command: python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev
+
+  # ── Celery Worker (AI background tasks) ──────────────────────────────────
+  celery-worker:
+    build:
+      context: .
+      dockerfile: recommender_ai_service/Dockerfile
+    volumes:
+      - ./recommender_ai_service:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - PRODUCT_SERVICE_URL=http://product-service:8000
+      - DJANGO_SKIP_ML_LOAD=1
+    depends_on:
+      - redis
+    working_dir: /app
+    command: celery -A config.celery worker --loglevel=info --concurrency=2
+
+  # ── Celery Beat (Nightly retrain scheduler) ───────────────────────────────
+  celery-beat:
+    build:
+      context: .
+      dockerfile: recommender_ai_service/Dockerfile
+    volumes:
+      - ./recommender_ai_service:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DJANGO_SKIP_ML_LOAD=1
+    depends_on:
+      - redis
+    working_dir: /app
+    command: celery -A config.celery beat --loglevel=info
+
+  # ── Redis (cache + Celery broker) ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # API Gateway with UI - Port 8000
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api_gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api_gateway:/app
+    environment:
+      - DEBUG=True
+      - CUSTOMER_SERVICE_URL=http://customer-service:8000
+      - PRODUCT_SERVICE_URL=http://product-service:8000
+      - CART_SERVICE_URL=http://cart-service:8000
+      - ORDER_SERVICE_URL=http://order-service:8000
+      - PAYMENT_SERVICE_URL=http://payment-service:8000
+      - SHIPPING_SERVICE_URL=http://shipping-service:8000
+      - RATING_SERVICE_URL=http://rating-service:8000
+      - RECOMMENDER_SERVICE_URL=http://recommender-service:8000
+    depends_on:
+      - customer-service
+      - product-service
+      - cart-service
+      - order-service
+      - payment-service
+      - shipping-service
+      - rating-service
+      - recommender-service
+    command: python manage.py runserver 0.0.0.0:8000
+
+volumes:
+  redis_data:

@@ -1,0 +1,159 @@
+{% extends 'gateway/base.html' %}
+
+{% block title %}Chi tiết đơn hàng #{{ order.id }} - Bookstore{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h1 class="display-5 mb-4">
+        <i class="bi bi-receipt"></i> Chi tiết đơn hàng #{{ order.id }}
+    </h1>
+
+    <div class="row">
+        <!-- Thông tin đơn hàng -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Thông tin đơn hàng</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Mã đơn hàng:</strong> #{{ order.id }}</p>
+                            <p><strong>Khách hàng:</strong> ID {{ order.customer_id }}</p>
+                            <p><strong>Ngày đặt:</strong> {{ order.created_at|date:"d/m/Y H:i" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Trạng thái:</strong> 
+                                {% if order.status == 'pending' %}
+                                    <span class="badge bg-warning text-dark">Chờ xử lý</span>
+                                {% elif order.status == 'paid' %}
+                                    <span class="badge bg-info">Đã thanh toán</span>
+                                {% elif order.status == 'shipped' %}
+                                    <span class="badge bg-primary">Đang giao hàng</span>
+                                {% elif order.status == 'delivered' %}
+                                    <span class="badge bg-success">Đã giao hàng</span>
+                                {% elif order.status == 'cancelled' %}
+                                    <span class="badge bg-danger">Đã hủy</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>Địa chỉ:</strong> {{ order.shipping_address }}</p>
+                            <p><strong>Điện thoại:</strong> {{ order.phone_number }}</p>
+                        </div>
+                    </div>
+                    {% if order.notes %}
+                        <hr>
+                        <p><strong>Ghi chú:</strong> {{ order.notes }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Sản phẩm trong đơn hàng -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Sản phẩm</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Sản phẩm</th>
+                                    <th>Giá</th>
+                                    <th>Số lượng</th>
+                                    <th>Tổng</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in order.items %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ item.book_title }}</strong><br>
+                                            <small class="text-muted">ID: {{ item.book_id }}</small>
+                                        </td>
+                                        <td>{{ item.price|floatformat:0 }} VNĐ</td>
+                                        <td>{{ item.quantity }}</td>
+                                        <td><strong>{{ item.subtotal|floatformat:0 }} VNĐ</strong></td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" class="text-end"><strong>Tổng cộng:</strong></td>
+                                    <td><strong class="text-danger fs-5">{{ order.total_amount|floatformat:0 }} VNĐ</strong></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Thông tin thanh toán và vận chuyển -->
+        <div class="col-md-4">
+            <!-- Thanh toán -->
+            {% if payment %}
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-credit-card"></i> Thanh toán
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Trạng thái:</strong> 
+                            {% if payment.status == 'pending' %}
+                                <span class="badge bg-warning text-dark">Chờ thanh toán</span>
+                            {% elif payment.status == 'completed' %}
+                                <span class="badge bg-success">Đã thanh toán</span>
+                            {% elif payment.status == 'failed' %}
+                                <span class="badge bg-danger">Thất bại</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>Phương thức:</strong> {{ payment.payment_method }}</p>
+                        <p><strong>Số tiền:</strong> {{ payment.amount|floatformat:0 }} VNĐ</p>
+                        {% if payment.payment_date %}
+                            <p><strong>Ngày thanh toán:</strong> {{ payment.payment_date|date:"d/m/Y H:i" }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Vận chuyển -->
+            {% if shipment %}
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-truck"></i> Vận chuyển
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Trạng thái:</strong> 
+                            {% if shipment.status == 'preparing' %}
+                                <span class="badge bg-warning text-dark">Đang chuẩn bị</span>
+                            {% elif shipment.status == 'shipping' %}
+                                <span class="badge bg-primary">Đang giao</span>
+                            {% elif shipment.status == 'delivered' %}
+                                <span class="badge bg-success">Đã giao</span>
+                            {% endif %}
+                        </p>
+                        {% if shipment.tracking_number %}
+                            <p><strong>Mã vận đơn:</strong> {{ shipment.tracking_number }}</p>
+                        {% endif %}
+                        {% if shipment.carrier %}
+                            <p><strong>Đơn vị vận chuyển:</strong> {{ shipment.carrier }}</p>
+                        {% endif %}
+                        {% if shipment.actual_delivery %}
+                            <p><strong>Đã giao:</strong> {{ shipment.actual_delivery|date:"d/m/Y H:i" }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <a href="{% url 'orders_list' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Quay lại danh sách
+        </a>
+    </div>
+</div>
+{% endblock %}

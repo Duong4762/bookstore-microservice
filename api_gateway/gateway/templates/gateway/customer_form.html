@@ -1,0 +1,53 @@
+{% extends 'gateway/base.html' %}
+
+{% block title %}Đăng ký khách hàng - Bookstore{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">
+                        <i class="bi bi-person-plus"></i> Đăng ký khách hàng mới
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Họ và tên: <span class="text-danger">*</span></label>
+                            <input type="text" name="full_name" class="form-control" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Email: <span class="text-danger">*</span></label>
+                            <input type="email" name="email" class="form-control" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Số điện thoại:</label>
+                            <input type="tel" name="phone_number" class="form-control">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Địa chỉ:</label>
+                            <textarea name="address" class="form-control" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-check-circle"></i> Đăng ký
+                            </button>
+                            <a href="{% url 'customers_list' %}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Quay lại
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends 'gateway/base.html' %}
+
+{% block title %}Danh sách đơn hàng - Bookstore{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h1 class="display-5 mb-4">
+        <i class="bi bi-bag-check"></i> Danh sách đơn hàng
+    </h1>
+
+    {% if orders %}
+        <div class="row g-4">
+            {% for order in orders %}
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-receipt"></i> Đơn hàng #{{ order.id }}
+                                    </h5>
+                                </div>
+                                <div class="col-md-6 text-end">
+                                    {% if order.status == 'pending' %}
+                                        <span class="badge bg-warning text-dark">Chờ xử lý</span>
+                                    {% elif order.status == 'paid' %}
+                                        <span class="badge bg-info">Đã thanh toán</span>
+                                    {% elif order.status == 'shipped' %}
+                                        <span class="badge bg-primary">Đang giao hàng</span>
+                                    {% elif order.status == 'delivered' %}
+                                        <span class="badge bg-success">Đã giao hàng</span>
+                                    {% elif order.status == 'cancelled' %}
+                                        <span class="badge bg-danger">Đã hủy</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <p class="mb-1">
+                                        <strong>Khách hàng:</strong> ID {{ order.customer_id }}
+                                    </p>
+                                    <p class="mb-1">
+                                        <strong>Địa chỉ giao hàng:</strong> {{ order.shipping_address }}
+                                    </p>
+                                    <p class="mb-1">
+                                        <strong>Số điện thoại:</strong> {{ order.phone_number }}
+                                    </p>
+                                    <p class="mb-1">
+                                        <strong>Ngày đặt:</strong> {{ order.created_at|date:"d/m/Y H:i" }}
+                                    </p>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <p class="mb-1">
+                                        <strong>Tổng tiền:</strong>
+                                    </p>
+                                    <p class="text-danger fs-4 mb-3">
+                                        {{ order.total_amount|floatformat:0 }} VNĐ
+                                    </p>
+                                    <a href="{% url 'order_detail' order.id %}" class="btn btn-primary">
+                                        <i class="bi bi-eye"></i> Chi tiết
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> Chưa có đơn hàng nào.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

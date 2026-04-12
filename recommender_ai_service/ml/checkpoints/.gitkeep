@@ -1,0 +1,2 @@
+# Model checkpoints directory — keep .pt files here
+# ETL will also write vocab.json to this directory
