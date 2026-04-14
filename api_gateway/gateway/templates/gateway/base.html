@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Bookstore Microservice{% endblock %}</title>
+    <title>{% block title %}Product Store Microservice{% endblock %}</title>
     
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -48,21 +48,45 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand" href="{% url 'home' %}">
-                <i class="bi bi-book"></i> Bookstore
+                <i class="bi bi-shop"></i> Product Store
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
+                    {% if request.session.current_customer_id %}
+                    <li class="nav-item">
+                        <span class="navbar-text me-3 text-light">
+                            <i class="bi bi-person-check"></i>
+                            {% if current_customer and current_customer.full_name %}
+                                {{ current_customer.full_name }}
+                            {% else %}
+                                Tài khoản #{{ request.session.current_customer_id }}
+                            {% endif %}
+                        </span>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'home' %}">
                             <i class="bi bi-house"></i> Trang chủ
                         </a>
                     </li>
+                    {% if not request.session.current_customer_id %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'customers_list' %}">
-                            <i class="bi bi-people"></i> Khách hàng
+                        <a class="nav-link" href="{% url 'customer_account_login' %}">
+                            <i class="bi bi-box-arrow-in-right"></i> Đăng nhập
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'customer_create' %}">
+                            <i class="bi bi-person-plus"></i> Đăng ký
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'current_cart_view' %}">
+                            <i class="bi bi-cart"></i> Giỏ hàng của tôi
                         </a>
                     </li>
                     <li class="nav-item">
@@ -70,6 +94,13 @@
                             <i class="bi bi-bag-check"></i> Đơn hàng
                         </a>
                     </li>
+                    {% if request.session.current_customer_id %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'customer_logout' %}">
+                            <i class="bi bi-box-arrow-right"></i> Đăng xuất
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -95,7 +126,8 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container text-center">
-            <p class="mb-0">&copy; 2026 Bookstore Microservice System. Kiến trúc Thiết kế Phần mềm.</p>
+            <p class="mb-0">&copy; 2026 Product Store Microservice System. Kiến trúc Thiết kế Phần mềm.</p>
+            <p class="mb-0 mt-2 small"><a href="{% url 'staff_login' %}" class="text-muted">Khu vực nhân viên</a></p>
         </div>
     </footer>
 

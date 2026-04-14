@@ -7,8 +7,9 @@ from dataclasses import dataclass
 
 from shared.exceptions import InvalidSKU
 
-# Allowed format: ALPHANUMERIC-ALPHANUMERIC  e.g. BOOK-0001, HAPO-0042-HB
-SKU_PATTERN = re.compile(r'^[A-Z0-9]{2,8}(-[A-Z0-9]{1,8}){1,3}$')
+# Allow practical SKU formats used by seeded data (multiple hyphen-separated parts),
+# e.g. DL-XPS13-16-512-SLV while still restricting to uppercase alnum tokens.
+SKU_PATTERN = re.compile(r'^[A-Z0-9]{2,16}(-[A-Z0-9]{1,16}){1,7}$')
 
 
 @dataclass(frozen=True)

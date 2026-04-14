@@ -10,7 +10,17 @@ services:
       - ./customer_service:/app
     environment:
       - DEBUG=True
-    command: python manage.py runserver 0.0.0.0:8000
+      - POSTGRES_DB=customer_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - CART_SERVICE_URL=http://cart-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
   # Product Service (DDD) - Port 8002
   product-service:
@@ -24,7 +34,16 @@ services:
     environment:
       - DEBUG=True
       - DJANGO_SETTINGS_MODULE=config.settings.dev
-    command: python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev
+      - POSTGRES_DB=product_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate --settings=config.settings.dev && python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev"
 
   # Cart Service - Port 8003
   cart-service:
@@ -37,9 +56,19 @@ services:
       - ./cart_service:/app
     environment:
       - DEBUG=True
+      - POSTGRES_DB=cart_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - PRODUCT_SERVICE_URL=http://product-service:8000
     depends_on:
-      - product-service
-    command: python manage.py runserver 0.0.0.0:8000
+      product-service:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
   # Order Service - Port 8004
   order-service:
@@ -52,11 +81,25 @@ services:
       - ./order_service:/app
     environment:
       - DEBUG=True
+      - POSTGRES_DB=order_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - CART_SERVICE_URL=http://cart-service:8000
+      - PAYMENT_SERVICE_URL=http://payment-service:8000
+      - SHIPPING_SERVICE_URL=http://shipping-service:8000
     depends_on:
-      - cart-service
-      - payment-service
-      - shipping-service
-    command: python manage.py runserver 0.0.0.0:8000
+      cart-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      shipping-service:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
   # Payment Service - Port 8005
   payment-service:
@@ -69,7 +112,16 @@ services:
       - ./payment_service:/app
     environment:
       - DEBUG=True
-    command: python manage.py runserver 0.0.0.0:8000
+      - POSTGRES_DB=payment_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
   # Shipping Service - Port 8006
   shipping-service:
@@ -82,7 +134,16 @@ services:
       - ./shipping_service:/app
     environment:
       - DEBUG=True
-    command: python manage.py runserver 0.0.0.0:8000
+      - POSTGRES_DB=shipping_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
   # Comment and Rating Service - Port 8007
   rating-service:
@@ -95,70 +156,69 @@ services:
       - ./comment_and_rating_service:/app
     environment:
       - DEBUG=True
+      - POSTGRES_DB=rating_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
     depends_on:
-      - product-service
-      - customer-service
-    command: python manage.py runserver 0.0.0.0:8000
+      product-service:
+        condition: service_started
+      customer-service:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
   # ── AI Recommendation Service - Port 8008 ────────────────────────────────
   recommender-service:
     build:
       context: .
-      dockerfile: recommender_ai_service/Dockerfile
+      dockerfile: ai_recommendation_service/Dockerfile
     ports:
       - "8008:8000"
     volumes:
-      - ./recommender_ai_service:/app
+      - ./ai_recommendation_service:/app
     environment:
       - DEBUG=True
       - DJANGO_SETTINGS_MODULE=config.settings.dev
       - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - PRODUCT_SERVICE_URL=http://product-service:8000
+      - POSTGRES_DB=ai_recommendation_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
     depends_on:
-      - redis
-      - product-service
-    command: python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev
+      redis:
+        condition: service_started
+      product-service:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate --settings=config.settings.dev && python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev"
 
-  # ── Celery Worker (AI background tasks) ──────────────────────────────────
-  celery-worker:
-    build:
-      context: .
-      dockerfile: recommender_ai_service/Dockerfile
-    volumes:
-      - ./recommender_ai_service:/app
+  # ── PostgreSQL (all Django services) ───────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
     environment:
-      - DJANGO_SETTINGS_MODULE=config.settings.dev
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - PRODUCT_SERVICE_URL=http://product-service:8000
-      - DJANGO_SKIP_ML_LOAD=1
-    depends_on:
-      - redis
-    working_dir: /app
-    command: celery -A config.celery worker --loglevel=info --concurrency=2
-
-  # ── Celery Beat (Nightly retrain scheduler) ───────────────────────────────
-  celery-beat:
-    build:
-      context: .
-      dockerfile: recommender_ai_service/Dockerfile
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - "5432:5432"
     volumes:
-      - ./recommender_ai_service:/app
-    environment:
-      - DJANGO_SETTINGS_MODULE=config.settings.dev
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DJANGO_SKIP_ML_LOAD=1
-    depends_on:
-      - redis
-    working_dir: /app
-    command: celery -A config.celery beat --loglevel=info
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init-multiple-dbs.sh:/docker-entrypoint-initdb.d/postgres-init-multiple-dbs.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
-  # ── Redis (cache + Celery broker) ─────────────────────────────────────────
+  # ── Redis (cache) ──────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     ports:
@@ -166,6 +226,27 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # Seed product data automatically after product schema is ready
+  product-seed:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+    volumes:
+      - ./product_service/sql/seed_products.sql:/seed/seed_products.sql:ro
+    environment:
+      - PGPASSWORD=postgres
+    command: >
+      sh -c "
+      until pg_isready -h postgres -p 5432 -U postgres -d product_db; do sleep 2; done;
+      until psql -h postgres -p 5432 -U postgres -d product_db -tAc \"SELECT to_regclass('public.products')\" | grep -q products; do sleep 2; done;
+      psql -h postgres -p 5432 -U postgres -d product_db -f /seed/seed_products.sql
+      "
+    restart: "no"
 
   # API Gateway with UI - Port 8000
   api-gateway:
@@ -178,6 +259,11 @@ services:
       - ./api_gateway:/app
     environment:
       - DEBUG=True
+      - POSTGRES_DB=gateway_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
       - CUSTOMER_SERVICE_URL=http://customer-service:8000
       - PRODUCT_SERVICE_URL=http://product-service:8000
       - CART_SERVICE_URL=http://cart-service:8000
@@ -186,16 +272,32 @@ services:
       - SHIPPING_SERVICE_URL=http://shipping-service:8000
       - RATING_SERVICE_URL=http://rating-service:8000
       - RECOMMENDER_SERVICE_URL=http://recommender-service:8000
+      - STAFF_USERNAME=staff
+      - STAFF_PASSWORD=staff123
     depends_on:
-      - customer-service
-      - product-service
-      - cart-service
-      - order-service
-      - payment-service
-      - shipping-service
-      - rating-service
-      - recommender-service
-    command: python manage.py runserver 0.0.0.0:8000
+      customer-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+      cart-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      shipping-service:
+        condition: service_started
+      rating-service:
+        condition: service_started
+      recommender-service:
+        condition: service_started
+      product-seed:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
 
 volumes:
   redis_data:
+  postgres_data:

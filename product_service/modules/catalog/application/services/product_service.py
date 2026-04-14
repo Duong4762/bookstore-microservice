@@ -11,6 +11,7 @@ from modules.catalog.domain.repositories.product_repository import AbstractProdu
 from modules.catalog.application.commands.create_product import CreateProductCommand
 from modules.catalog.application.commands.update_product import UpdateProductCommand
 from modules.catalog.application.commands.create_variant import CreateVariantCommand
+from modules.catalog.application.commands.update_variant import UpdateVariantCommand
 from modules.catalog.application.queries.get_product import (
     GetProductQuery, ListProductsQuery
 )
@@ -122,6 +123,27 @@ class ProductApplicationService:
             cover_image_url=cmd.cover_image_url,
             is_active=cmd.is_active,
         )
+        return self._repo.save_variant(variant)
+
+    def update_variant(self, cmd: UpdateVariantCommand) -> Variant:
+        """Cập nhật biến thể (đúng product_id)."""
+        variant = self._repo.get_variant_by_id(cmd.variant_id)
+        if variant is None:
+            raise VariantNotFound(cmd.variant_id)
+        if variant.product_id != cmd.product_id:
+            raise VariantNotFound(cmd.variant_id)
+
+        if cmd.sku is not None:
+            variant.sku = SKU(cmd.sku)
+        if cmd.price is not None:
+            variant.price = Money.of(cmd.price)
+        if cmd.stock is not None:
+            variant.stock = cmd.stock
+        if cmd.cover_image_url is not None:
+            variant.cover_image_url = cmd.cover_image_url
+        if cmd.is_active is not None:
+            variant.is_active = cmd.is_active
+
         return self._repo.save_variant(variant)
 
     def check_stock(self, variant_id: int, requested_qty: int) -> tuple[bool, str]:

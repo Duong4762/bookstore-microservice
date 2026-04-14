@@ -9,6 +9,7 @@ from modules.catalog.application.services.product_service import ProductApplicat
 from modules.catalog.application.commands.create_product import CreateProductCommand
 from modules.catalog.application.commands.update_product import UpdateProductCommand
 from modules.catalog.application.commands.create_variant import CreateVariantCommand
+from modules.catalog.application.commands.update_variant import UpdateVariantCommand
 from modules.catalog.application.queries.get_product import GetProductQuery, ListProductsQuery
 from modules.catalog.infrastructure.repositories.product_repository_impl import ProductRepositoryImpl
 from modules.catalog.infrastructure.models import ProductModel, VariantModel
@@ -40,12 +41,13 @@ class ProductViewSet(viewsets.ViewSet):
     def list(self, request):
         """GET /api/products/"""
         service = get_product_service()
+        include_inactive = request.query_params.get('include_inactive') == 'true'
         query = ListProductsQuery(
             search=request.query_params.get('search'),
             category_id=request.query_params.get('category_id'),
             brand_id=request.query_params.get('brand_id'),
             in_stock_only=request.query_params.get('in_stock') == 'true',
-            is_active_only=True,
+            is_active_only=not include_inactive,
         )
         products = service.list_products(query)
         # Use ORM model for serializer compatibility
@@ -184,5 +186,28 @@ class ProductViewSet(viewsets.ViewSet):
             return Response(VariantSerializer(model).data, status=status.HTTP_201_CREATED)
         except ProductNotFound:
             return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['put', 'patch'], url_path=r'variants/(?P<variant_id>[0-9]+)')
+    def variant_update(self, request, pk=None, variant_id=None):
+        """PUT/PATCH /api/products/{id}/variants/{variant_id}/ — cập nhật biến thể."""
+        service = get_product_service()
+        data = request.data
+        try:
+            cmd = UpdateVariantCommand(
+                variant_id=int(variant_id),
+                product_id=int(pk),
+                sku=data.get('sku'),
+                price=data.get('price'),
+                stock=data.get('stock'),
+                cover_image_url=data.get('cover_image_url'),
+                is_active=data.get('is_active'),
+            )
+            variant = service.update_variant(cmd)
+            model = VariantModel.objects.get(id=variant.id)
+            return Response(VariantSerializer(model).data)
+        except VariantNotFound:
+            return Response({'error': 'Variant not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

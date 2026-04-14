@@ -5,12 +5,17 @@ from rest_framework.routers import DefaultRouter
 from django.urls import path, include
 
 from modules.catalog.presentation.api.views.product_view import ProductViewSet
-from modules.catalog.presentation.api.views.category_view import CategoryViewSet, BrandViewSet
+from modules.catalog.presentation.api.views.category_view import (
+    CategoryViewSet,
+    BrandViewSet,
+    ProductTypeViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'products', ProductViewSet, basename='product')
 router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'brands', BrandViewSet, basename='brand')
+router.register(r'product-types', ProductTypeViewSet, basename='product-type')
 
 urlpatterns = [
     path('', include(router.urls)),

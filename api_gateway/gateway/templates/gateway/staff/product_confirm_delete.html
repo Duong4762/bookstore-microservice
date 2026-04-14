@@ -1,0 +1,11 @@
+{% extends "gateway/staff/base_staff.html" %}
+{% block title %}Xoa san pham{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Xoa san pham</h1>
+<p>Ban co chac muon xoa <strong>{{ product.name }}</strong> (ID {{ product.id }})? Thao tac khong hoan tac.</p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Xoa vinh vien</button>
+    <a href="{% url 'staff_product_list' %}" class="btn btn-outline-secondary">Huy</a>
+</form>
+{% endblock %}

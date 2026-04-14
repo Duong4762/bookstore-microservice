@@ -1,0 +1,45 @@
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+    initial = True
+
+    dependencies = []
+
+    operations = [
+        migrations.CreateModel(
+            name="Cart",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("customer_id", models.IntegerField(unique=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+            ],
+            options={
+                "db_table": "carts",
+                "ordering": ["-created_at"],
+            },
+        ),
+        migrations.CreateModel(
+            name="CartItem",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("book_id", models.IntegerField()),
+                ("quantity", models.IntegerField(default=1)),
+                ("price", models.DecimalField(decimal_places=2, max_digits=10)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "cart",
+                    models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="items", to="carts.cart"),
+                ),
+            ],
+            options={
+                "db_table": "cart_items",
+                "ordering": ["-created_at"],
+                "unique_together": {("cart", "book_id")},
+            },
+        ),
+    ]
+

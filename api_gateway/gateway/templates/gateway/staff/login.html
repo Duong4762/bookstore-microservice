@@ -1,0 +1,26 @@
+{% extends "gateway/staff/base_staff.html" %}
+{% block title %}Dang nhap nhan vien{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-4">Dang nhap nhan vien</h1>
+                <p class="text-muted small">He thong khong ho tro dang ky. Tai khoan duoc cau hinh boi quan tri.</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label" for="username">Ten dang nhap</label>
+                        <input type="text" class="form-control" id="username" name="username" required autocomplete="username">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="password">Mat khau</label>
+                        <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-dark w-100">Dang nhap</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

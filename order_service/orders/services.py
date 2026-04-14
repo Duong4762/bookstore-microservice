@@ -1,6 +1,7 @@
 """
 Service layer for Order business logic
 """
+import os
 import requests
 from typing import Optional, Dict, List
 from django.db import transaction
@@ -11,9 +12,9 @@ from .serializers import OrderSerializer
 class OrderService:
     """Service class xử lý business logic cho Order"""
     
-    CART_SERVICE_URL = 'http://localhost:8003/api'
-    PAYMENT_SERVICE_URL = 'http://localhost:8005/api/payments/'
-    SHIPPING_SERVICE_URL = 'http://localhost:8006/api/shipments/'
+    CART_SERVICE_URL = os.environ.get('CART_SERVICE_URL', 'http://cart-service:8000') + '/api'
+    PAYMENT_SERVICE_URL = os.environ.get('PAYMENT_SERVICE_URL', 'http://payment-service:8000') + '/api/payments/'
+    SHIPPING_SERVICE_URL = os.environ.get('SHIPPING_SERVICE_URL', 'http://shipping-service:8000') + '/api/shipments/'
     
     @staticmethod
     def _get_cart_data(cart_id: int) -> Optional[Dict]:

@@ -77,13 +77,14 @@ class ProductListSerializer(serializers.ModelSerializer):
     min_price = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
+    cover_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
         fields = [
             'id', 'name', 'slug', 'description',
             'category_name', 'brand_name',
-            'is_active', 'min_price', 'in_stock', 'author',
+            'is_active', 'min_price', 'in_stock', 'author', 'cover_image_url',
         ]
 
     def get_min_price(self, obj):
@@ -97,3 +98,10 @@ class ProductListSerializer(serializers.ModelSerializer):
 
     def get_author(self, obj):
         return (obj.attributes or {}).get('author')
+
+    def get_cover_image_url(self, obj):
+        variants = obj.variants.filter(is_active=True)
+        if variants.exists():
+            chosen = variants.order_by('price').first()
+            return getattr(chosen, 'cover_image_url', None)
+        return None

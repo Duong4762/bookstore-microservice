@@ -19,7 +19,15 @@
                     <div class="row">
                         <div class="col-md-6">
                             <p><strong>Mã đơn hàng:</strong> #{{ order.id }}</p>
-                            <p><strong>Khách hàng:</strong> ID {{ order.customer_id }}</p>
+                            <p>
+                                <strong>Khách hàng:</strong>
+                                {% if customer %}
+                                    {{ customer.full_name|default:"Khách hàng" }}
+                                    {% if customer.email %}<span class="text-muted">({{ customer.email }})</span>{% endif %}
+                                {% else %}
+                                    ID {{ order.customer_id }}
+                                {% endif %}
+                            </p>
                             <p><strong>Ngày đặt:</strong> {{ order.created_at|date:"d/m/Y H:i" }}</p>
                         </div>
                         <div class="col-md-6">
@@ -67,8 +75,8 @@
                                 {% for item in order.items %}
                                     <tr>
                                         <td>
-                                            <strong>{{ item.book_title }}</strong><br>
-                                            <small class="text-muted">ID: {{ item.book_id }}</small>
+                                            <strong>{{ item.product_title|default:item.book_title }}</strong><br>
+                                            <small class="text-muted">ID: {{ item.product_id|default:item.book_id }}</small>
                                         </td>
                                         <td>{{ item.price|floatformat:0 }} VNĐ</td>
                                         <td>{{ item.quantity }}</td>

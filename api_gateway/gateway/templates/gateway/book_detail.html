@@ -1,24 +1,24 @@
 {% extends 'gateway/base.html' %}
 
-{% block title %}{{ book.title }} - Bookstore{% endblock %}
+{% block title %}{% firstof product.name "Sản phẩm" %} - Cửa hàng{% endblock %}
 
 {% block content %}
 <div class="container my-5">
     <div class="row">
         <div class="col-md-4">
-            {% if book.cover_image_url %}
-                <img src="{{ book.cover_image_url }}" class="img-fluid rounded shadow" alt="{{ book.title }}">
+            {% if product.cover_image_url %}
+                <img src="{{ product.cover_image_url }}" class="img-fluid rounded shadow" alt="{{ product.name }}">
             {% else %}
                 <div class="bg-secondary text-white d-flex align-items-center justify-content-center rounded shadow" style="height: 500px;">
-                    <i class="bi bi-book" style="font-size: 8rem;"></i>
+                    <i class="bi bi-box" style="font-size: 8rem;"></i>
                 </div>
             {% endif %}
         </div>
         
         <div class="col-md-8">
-            <h1 class="display-5">{{ book.title }}</h1>
+            <h1 class="display-5">{{ product.name }}</h1>
             <p class="lead text-muted">
-                <i class="bi bi-person"></i> {{ book.author }}
+                <i class="bi bi-tag"></i> {% firstof product.brand_name product.brand.name product.category_name product.category.name "Sản phẩm" %}
             </p>
             
             {% if stats.average_rating %}
@@ -40,21 +40,21 @@
             
             <div class="row mb-3">
                 <div class="col-md-6">
-                    <p><strong>Giá:</strong> <span class="text-danger fs-4">{{ book.price|floatformat:0 }} VNĐ</span></p>
-                    <p><strong>Nhà xuất bản:</strong> {{ book.publisher|default:"N/A" }}</p>
-                    <p><strong>Năm xuất bản:</strong> {{ book.publication_year|default:"N/A" }}</p>
+                    <p><strong>Giá:</strong> <span class="text-danger fs-4">{% firstof product.min_price product.price "0" %} VNĐ</span></p>
+                    <p><strong>Thương hiệu:</strong> {% firstof product.brand_name product.brand.name "N/A" %}</p>
+                    <p><strong>Mã SKU:</strong> {{ product.sku|default:"N/A" }}</p>
                 </div>
                 <div class="col-md-6">
-                    <p><strong>Số trang:</strong> {{ book.pages|default:"N/A" }}</p>
-                    <p><strong>Ngôn ngữ:</strong> {{ book.language }}</p>
-                    <p><strong>Thể loại:</strong> {{ book.category|default:"N/A" }}</p>
+                    <p><strong>Tồn kho:</strong> {{ product.stock_quantity|default:"N/A" }}</p>
+                    <p><strong>Danh mục:</strong> {% firstof product.category_name product.category.name "N/A" %}</p>
+                    <p><strong>Loại:</strong> {% firstof product.product_type_name product.product_type.name "N/A" %}</p>
                 </div>
             </div>
             
             <div class="mb-3">
-                {% if book.in_stock %}
+                {% if product.in_stock %}
                     <span class="badge bg-success fs-6">
-                        <i class="bi bi-check-circle"></i> Còn hàng: {{ book.stock_quantity }}
+                        <i class="bi bi-check-circle"></i> Còn hàng: {{ product.stock_quantity }}
                     </span>
                 {% else %}
                     <span class="badge bg-danger fs-6">
@@ -64,31 +64,56 @@
             </div>
             
             <h4>Mô tả</h4>
-            <p>{{ book.description|default:"Chưa có mô tả" }}</p>
+            <p>{{ product.description|default:"Chưa có mô tả" }}</p>
             
             <!-- Form thêm vào giỏ hàng -->
-            {% if book.in_stock %}
-                <form method="POST" action="{% url 'add_to_cart' book.id %}" class="mt-4">
+            {% if product.in_stock and customer_id %}
+                <form method="POST" action="{% url 'add_to_cart' product.id %}" class="mt-4">
                     {% csrf_token %}
                     <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">ID Khách hàng:</label>
-                            <input type="number" name="customer_id" class="form-control" required>
-                        </div>
-                        <div class="col-md-3">
+                        <div class="col-md-8">
                             <label class="form-label">Số lượng:</label>
-                            <input type="number" name="quantity" class="form-control" value="1" min="1" max="{{ book.stock_quantity }}">
+                            <input type="number" name="quantity" class="form-control" value="1" min="1" max="{{ product.stock_quantity }}">
                         </div>
-                        <div class="col-md-3 d-flex align-items-end">
+                        <div class="col-md-4 d-flex align-items-end">
                             <button type="submit" class="btn btn-success w-100">
                                 <i class="bi bi-cart-plus"></i> Thêm vào giỏ
                             </button>
                         </div>
                     </div>
                 </form>
+            {% elif not customer_id %}
+                <div class="alert alert-warning mt-3">
+                    Vui lòng chọn khách hàng và đăng nhập để mua hàng và nhận gợi ý cá nhân hóa.
+                </div>
             {% endif %}
         </div>
     </div>
+
+    {% if customer_id and recommended_products %}
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <h4><i class="bi bi-stars"></i> Gợi ý cho bạn</h4>
+            </div>
+            {% for rb in recommended_products %}
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        {% if rb.cover_image_url %}
+                            <img src="{{ rb.cover_image_url }}" class="card-img-top" style="height: 180px; object-fit: cover;" alt="{{ rb.name }}">
+                        {% endif %}
+                        <div class="card-body d-flex flex-column">
+                            <h6 class="card-title">{{ rb.name }}</h6>
+                            <p class="small text-muted mb-1">{% firstof rb.brand_name rb.brand.name rb.category_name rb.category.name "Sản phẩm" %}</p>
+                            <strong class="text-danger mb-2">{% firstof rb.min_price rb.price "0" %} VNĐ</strong>
+                            <a class="btn btn-outline-primary btn-sm mt-auto" href="{% url 'product_detail' rb.id %}">
+                                Xem sản phẩm
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
     
     <!-- Phần đánh giá -->
     <div class="row mt-5">
@@ -103,12 +128,9 @@
                     <h5 class="mb-0">Viết đánh giá của bạn</h5>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{% url 'add_rating' book.id %}">
+                    {% if customer_id %}
+                    <form method="POST" action="{% url 'add_rating' product.id %}">
                         {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label">ID Khách hàng:</label>
-                            <input type="number" name="customer_id" class="form-control" required>
-                        </div>
                         <div class="mb-3">
                             <label class="form-label">Đánh giá (1-5 sao):</label>
                             <select name="rating" class="form-select" required>
@@ -127,6 +149,11 @@
                             <i class="bi bi-send"></i> Gửi đánh giá
                         </button>
                     </form>
+                    {% else %}
+                    <div class="alert alert-warning mb-0">
+                        Vui lòng đăng nhập khách hàng để gửi đánh giá.
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             
@@ -154,7 +181,7 @@
                 {% endfor %}
             {% else %}
                 <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> Chưa có đánh giá nào cho sách này.
+                    <i class="bi bi-info-circle"></i> Chưa có đánh giá nào cho sản phẩm này.
                 </div>
             {% endif %}
         </div>

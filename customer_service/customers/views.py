@@ -2,6 +2,7 @@
 Views for Customer API - chỉ xử lý HTTP request/response
 """
 from rest_framework import viewsets, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Customer
 from .serializers import CustomerSerializer
@@ -74,3 +75,15 @@ class CustomerViewSet(viewsets.ModelViewSet):
             )
         
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], url_path='by-email')
+    def by_email(self, request):
+        """GET /customers/by-email/?email= - Tra cứu khách theo email (đăng nhập cửa hàng)."""
+        email = (request.query_params.get('email') or '').strip()
+        if not email:
+            return Response({'error': 'email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        customer = CustomerService.get_customer_by_email(email)
+        if not customer:
+            return Response({'error': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(customer)
+        return Response(serializer.data)

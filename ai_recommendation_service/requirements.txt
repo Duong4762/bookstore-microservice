@@ -1,0 +1,25 @@
+# Django
+Django>=4.2,<5.0
+djangorestframework>=3.14
+django-cors-headers>=4.3
+django-redis>=5.4
+
+# DB (production)
+psycopg2-binary>=2.9
+
+# Graph / ML
+networkx>=3.2
+# Torch CPU wheels in this image work reliably with NumPy 1.x.
+numpy>=1.26,<2
+faiss-cpu>=1.7.4
+
+# HTTP
+requests>=2.31
+python-dotenv>=1.0
+
+# Server
+gunicorn>=21.2
+
+# Tests
+pytest>=7.4
+pytest-django>=4.7

@@ -1,6 +1,7 @@
 """
 Service layer for Customer business logic
 """
+import os
 import requests
 from typing import Optional, List
 from .models import Customer
@@ -10,7 +11,7 @@ from .serializers import CustomerSerializer
 class CustomerService:
     """Service class xử lý business logic cho Customer"""
     
-    CART_SERVICE_URL = 'http://localhost:8003/api/carts/'
+    CART_SERVICE_URL = os.environ.get('CART_SERVICE_URL', 'http://cart-service:8000') + '/api/carts/'
     
     @staticmethod
     def create_customer(data: dict) -> Customer:
@@ -82,6 +83,13 @@ class CustomerService:
             return Customer.objects.get(id=customer_id)
         except Customer.DoesNotExist:
             return None
+
+    @staticmethod
+    def get_customer_by_email(email: str) -> Optional[Customer]:
+        """Lấy customer theo email (không phân biệt hoa thường)."""
+        if not email or not str(email).strip():
+            return None
+        return Customer.objects.filter(email__iexact=str(email).strip()).first()
     
     @staticmethod
     def update_customer(customer_id: int, data: dict, partial: bool = False) -> Optional[Customer]:

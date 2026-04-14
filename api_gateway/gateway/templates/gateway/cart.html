@@ -28,8 +28,8 @@
                                     {% for item in cart.items %}
                                         <tr>
                                             <td>
-                                                <strong>{{ item.book_title }}</strong><br>
-                                                <small class="text-muted">ID: {{ item.book_id }}</small>
+                                                <strong>{{ item.product_title|default:item.book_title }}</strong><br>
+                                                <small class="text-muted">ID: {{ item.product_id|default:item.book_id }}</small>
                                             </td>
                                             <td>{{ item.price|floatformat:0 }} VNĐ</td>
                                             <td>{{ item.quantity }}</td>

@@ -1,6 +1,7 @@
 """
 Service layer for Cart business logic
 """
+import os
 import requests
 from typing import Optional, Dict
 from .models import Cart, CartItem
@@ -10,7 +11,7 @@ from .serializers import CartSerializer, CartItemSerializer
 class CartService:
     """Service class xử lý business logic cho Cart"""
     
-    BOOK_SERVICE_URL = 'http://localhost:8002/api/books'
+    PRODUCT_SERVICE_URL = os.environ.get('PRODUCT_SERVICE_URL', 'http://product-service:8000') + '/api/products'
     
     @staticmethod
     def create_cart(customer_id: int) -> Cart:
@@ -71,7 +72,7 @@ class CartService:
         """
         try:
             response = requests.get(
-                f'{CartService.BOOK_SERVICE_URL}/{book_id}/',
+                f'{CartService.PRODUCT_SERVICE_URL}/{book_id}/',
                 timeout=5
             )
             if response.status_code == 200:
@@ -111,7 +112,16 @@ class CartItemService:
         if not book_info:
             raise ValueError("Book not found")
         
-        price = float(book_info['price'])
+        # product_service trả dữ liệu theo nhiều shape; ưu tiên price trực tiếp.
+        raw_price = book_info.get('price')
+        if raw_price is None:
+            raw_price = book_info.get('min_price')
+        if raw_price is None and isinstance(book_info.get('variants'), list) and book_info['variants']:
+            raw_price = book_info['variants'][0].get('price')
+        if raw_price is None:
+            raise ValueError("Book price not found")
+
+        price = float(raw_price)
         
         # Kiểm tra xem sách đã có trong giỏ hàng chưa
         cart_item, created = CartItem.objects.get_or_create(

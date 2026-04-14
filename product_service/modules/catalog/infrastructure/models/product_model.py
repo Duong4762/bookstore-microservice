@@ -5,6 +5,7 @@ from django.db import models
 from .category_model import CategoryModel
 from .brand_model import BrandModel
 from .product_type_model import ProductTypeModel
+from modules.catalog.infrastructure.querysets.product_queryset import ProductQuerySet
 
 
 class ProductModel(models.Model):
@@ -32,6 +33,7 @@ class ProductModel(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    objects = ProductQuerySet.as_manager()
 
     class Meta:
         db_table = 'products'

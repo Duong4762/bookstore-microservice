@@ -17,7 +17,7 @@ class VariantModel(models.Model):
     stock = models.IntegerField(default=0)
     # e.g. {"edition": "hardcover", "color": "red"}
     attributes = models.JSONField(default=dict, blank=True)
-    cover_image_url = models.URLField(max_length=500, blank=True, null=True)
+    cover_image_url = models.URLField(max_length=2048, blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
