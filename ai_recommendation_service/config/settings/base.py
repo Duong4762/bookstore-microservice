@@ -78,7 +78,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
     'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRateThrottle'],
-    'DEFAULT_THROTTLE_RATES': {'anon': '200/min', 'event_collector': '60/min'},
+    'DEFAULT_THROTTLE_RATES': {'anon': '200/min', 'event_collector': '60/min', 'chat': '30/min'},
 }
 
 CORS_ALLOW_ALL_ORIGINS = True
@@ -101,6 +101,14 @@ if _has_django_redis:
     }
 
 PRODUCT_SERVICE_URL = os.environ.get('PRODUCT_SERVICE_URL', 'http://localhost:8002')
+
+# Chat RAG — Google Gemini (Generative Language API). Không set key → trả lời template từ đồ thị.
+GEMINI_API_KEY = (os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY') or '').strip()
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
+GEMINI_TIMEOUT = int(os.environ.get('GEMINI_TIMEOUT', '60'))
+
+# URL cửa hàng (gateway) để in link tuyệt đối trong chat; để trống → chỉ dùng đường dẫn tương đối /products/{id}/
+CHAT_STORE_BASE_URL = os.environ.get('CHAT_STORE_BASE_URL', '').rstrip('/')
 
 ARTIFACTS_DIR = BASE_DIR / 'ml' / 'artifacts'
 RECOMMENDATION_ML = {

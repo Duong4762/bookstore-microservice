@@ -190,6 +190,10 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-AIzaSyDXpI9lUOFilhIM3BZKxZUCmC1wJhd55pk}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      # URL công khai của API Gateway (vd: http://localhost:8000) để chat in link đầy đủ; để trống = chỉ /products/{id}/
+      - CHAT_STORE_BASE_URL=${CHAT_STORE_BASE_URL:-http://localhost:8000}
     depends_on:
       redis:
         condition: service_started

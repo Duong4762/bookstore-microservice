@@ -1,8 +1,13 @@
 """
 Views for API Gateway - chỉ xử lý HTTP request/response và rendering
 """
-from django.shortcuts import render, redirect
+import json
+
 from django.contrib import messages
+from django.http import JsonResponse
+from django.shortcuts import render, redirect
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from .services import (
     CustomerGatewayService,
     ProductCatalogGatewayService,
@@ -15,6 +20,48 @@ from .services import (
 )
 
 SESSION_CUSTOMER_KEY = 'current_customer_id'
+
+
+@csrf_exempt
+@require_POST
+def chat_api(request):
+    """Proxy JSON tới AI recommendation — chat RAG + Gemini."""
+    try:
+        body = json.loads(request.body.decode('utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'error': 'invalid_json'}, status=400)
+    message = (body.get('message') or '').strip()
+    if not message:
+        return JsonResponse({'error': 'message_required'}, status=400)
+    customer_id = _current_customer_id(request)
+    uid = body.get('user_id')
+    if uid is not None:
+        try:
+            user_id = int(uid)
+            if user_id < 1:
+                user_id = None
+        except (TypeError, ValueError):
+            user_id = customer_id
+    else:
+        user_id = customer_id
+    history = body.get('history') if isinstance(body.get('history'), list) else []
+    clean_history = []
+    for h in history[-10:]:
+        if not isinstance(h, dict):
+            continue
+        role = h.get('role')
+        content = (h.get('content') or '').strip()
+        if role in ('user', 'assistant') and content:
+            clean_history.append({'role': role, 'content': content[:4000]})
+    ok, data, err = RecommendationGatewayService.chat(
+        message=message,
+        user_id=user_id,
+        history=clean_history,
+        include_context=bool(body.get('include_context')),
+    )
+    if not ok or not data:
+        return JsonResponse({'error': 'upstream_error', 'detail': err}, status=502)
+    return JsonResponse(data)
 
 
 def _current_customer_id(request):

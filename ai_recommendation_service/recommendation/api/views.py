@@ -6,16 +6,23 @@ import time
 
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from catalog_proxy.client import get_products_bulk
 
 from ..services.cold_start import popular_product_ids
 from ..services.embedding_cache import UserEmbeddingCache
+from ..services.graph_rag import generate_rag_reply
 from ..services.inference import RecommendEngine
 from ..services.retrain_runtime import retrain_status, trigger_retrain_async
 
-from .serializers import InvalidateSerializer, RecommendPostSerializer, RecommendQuerySerializer
+from .serializers import (
+    ChatSerializer,
+    InvalidateSerializer,
+    RecommendPostSerializer,
+    RecommendQuerySerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,3 +130,37 @@ class InvalidateCacheView(APIView):
         uid = ser.validated_data['user_id']
         UserEmbeddingCache.invalidate(uid)
         return Response({'status': 'ok', 'user_id': uid})
+
+
+class ChatView(APIView):
+    """POST /api/chat/ — RAG từ đồ thị + Google Gemini."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'chat'
+
+    def post(self, request):
+        ser = ChatSerializer(data=request.data)
+        if not ser.is_valid():
+            return Response({'errors': ser.errors}, status=status.HTTP_400_BAD_REQUEST)
+        d = ser.validated_data
+        hist_raw = d.get('history') or []
+        history = [{'role': x['role'], 'content': x['content']} for x in hist_raw]
+        try:
+            out = generate_rag_reply(
+                message=d['message'].strip(),
+                user_id=d.get('user_id'),
+                history=history,
+            )
+        except Exception as exc:
+            logger.error('chat error: %s', exc, exc_info=True)
+            return Response({'error': 'internal_error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        body = {
+            'reply': out['reply'],
+            'mode': out['mode'],
+            'product_ids': out['product_ids'],
+            'meta': out['meta'],
+        }
+        if d.get('include_context'):
+            body['context'] = out['context']
+        return Response(body)

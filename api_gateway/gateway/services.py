@@ -3,7 +3,7 @@ Service layer for API Gateway - xử lý business logic và giao tiếp với mi
 """
 import os
 import requests
-from typing import Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 CUSTOMER_SERVICE_URL = f"{os.environ.get('CUSTOMER_SERVICE_URL', 'http://localhost:8001')}/api"
@@ -522,3 +522,27 @@ class RecommendationGatewayService:
         except Exception as e:
             print(f"Error tracking event {event_type} for user {user_id}: {str(e)}")
             return False
+
+    @staticmethod
+    def chat(
+        message: str,
+        user_id: Optional[int] = None,
+        history: Optional[List[Dict[str, str]]] = None,
+        include_context: bool = False,
+    ) -> tuple[bool, Optional[Dict[str, Any]], str]:
+        payload: Dict[str, Any] = {'message': message, 'include_context': include_context}
+        if user_id is not None:
+            payload['user_id'] = user_id
+        if history:
+            payload['history'] = history[-10:]
+        try:
+            response = requests.post(
+                f'{RECOMMENDER_SERVICE_URL}/api/chat/',
+                json=payload,
+                timeout=60,
+            )
+            if response.status_code == 200:
+                return True, response.json(), ''
+            return False, None, f'HTTP {response.status_code}: {response.text[:500]}'
+        except Exception as e:
+            return False, None, str(e)

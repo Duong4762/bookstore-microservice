@@ -133,6 +133,136 @@
 
     <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <div id="chat-widget" class="position-fixed" style="bottom:1.25rem;right:1.25rem;z-index:1050;">
+        <div id="chat-panel" class="card shadow d-none" style="width:min(100vw - 2rem, 380px); min-height:260px; max-height:min(70vh, 460px); margin-bottom:0.5rem;">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+                <span class="small"><i class="bi bi-stars"></i> Trợ lý (RAG + Gemini)</span>
+                <button type="button" class="btn-close btn-close-white" id="chat-close" aria-label="Đóng"></button>
+            </div>
+            <div id="chat-messages" class="card-body overflow-auto small py-2" style="min-height:200px;"></div>
+            <div class="card-footer p-2 border-top">
+                <div class="input-group input-group-sm">
+                    <input type="text" id="chat-input" class="form-control" placeholder="Hỏi về sản phẩm gợi ý..." maxlength="2000" autocomplete="off">
+                    <button class="btn btn-primary" type="button" id="chat-send">Gửi</button>
+                </div>
+            </div>
+        </div>
+        <button type="button" id="chat-fab" class="btn btn-primary rounded-circle shadow" title="Mở / đóng trò chuyện" style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;">
+            <i class="bi bi-chat-dots fs-4"></i>
+        </button>
+    </div>
+    <script>
+    (function(){
+        var fab = document.getElementById('chat-fab');
+        var panel = document.getElementById('chat-panel');
+        var closeBtn = document.getElementById('chat-close');
+        var sendBtn = document.getElementById('chat-send');
+        var input = document.getElementById('chat-input');
+        var messages = document.getElementById('chat-messages');
+        if (!fab || !panel || !messages) return;
+        window.__ragHistory = window.__ragHistory || [];
+        function scrollBottom(){ messages.scrollTop = messages.scrollHeight; }
+        function escapeHtml(s) {
+            var d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+        /** Linkify từng dòng — tránh chạy 2 regex lần lượt (regex /products/ sẽ cắt nhầm vào href đã tạo). */
+        function linkifyAssistantText(raw) {
+            var lines = raw.split('\n');
+            var out = [];
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+                var trimmed = line.trim();
+                if (trimmed === '') {
+                    out.push('');
+                    continue;
+                }
+                if (/^https?:\/\/\S+$/i.test(trimmed)) {
+                    var href = trimmed;
+                    var pidMatch = href.match(/\/products\/(\d+)(?:\/|$)/);
+                    var label = pidMatch ? ('Xem chi tiết #' + pidMatch[1]) : trimmed;
+                    out.push(
+                        '<a href="' + escapeHtml(href) + '" class="link-primary" target="_blank" rel="noopener noreferrer">' +
+                        escapeHtml(label) + '</a>'
+                    );
+                    continue;
+                }
+                if (/^\/products\/\d+\/?$/i.test(trimmed)) {
+                    var path = trimmed.endsWith('/') ? trimmed : (trimmed + '/');
+                    var m = path.match(/\/products\/(\d+)\//);
+                    var id = m ? m[1] : '';
+                    out.push(
+                        '<a href="' + escapeHtml(path) + '" class="link-primary text-decoration-underline">Xem chi tiết #' +
+                        escapeHtml(id) + '</a>'
+                    );
+                    continue;
+                }
+                out.push(escapeHtml(line));
+            }
+            return out.join('<br>');
+        }
+        function appendBubble(role, text){
+            var div = document.createElement('div');
+            div.className = 'mb-2 ' + (role === 'user' ? 'text-end' : 'text-start');
+            var bubble = document.createElement('div');
+            bubble.className = 'd-inline-block p-2 rounded small ' + (role === 'user' ? 'bg-primary text-white' : 'bg-light border text-dark');
+            bubble.style.maxWidth = '92%';
+            if (role === 'assistant') {
+                bubble.innerHTML = linkifyAssistantText(text);
+            } else {
+                bubble.textContent = text;
+            }
+            div.appendChild(bubble);
+            messages.appendChild(div);
+            scrollBottom();
+        }
+        function setOpen(open) {
+            if (open) {
+                panel.classList.remove('d-none');
+                if (!messages.dataset.ready) {
+                    messages.dataset.ready = '1';
+                    appendBubble('assistant', 'Xin chào! Hỏi mình về sản phẩm gợi ý (dựa trên đồ thị; trả lời bằng Gemini khi đã cấu hình API key trên dịch vụ AI).');
+                }
+            } else {
+                panel.classList.add('d-none');
+            }
+        }
+        fab.addEventListener('click', function(){ setOpen(panel.classList.contains('d-none')); });
+        closeBtn.addEventListener('click', function(){ setOpen(false); });
+        async function sendChat(){
+            var msg = (input && input.value || '').trim();
+            if (!msg) return;
+            appendBubble('user', msg);
+            input.value = '';
+            sendBtn.disabled = true;
+            var hist = window.__ragHistory || [];
+            try {
+                var res = await fetch('{% url "chat_api" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg, history: hist }),
+                });
+                var data = await res.json();
+                if (!res.ok) {
+                    appendBubble('assistant', (data && data.detail) ? ('Lỗi: ' + data.detail) : 'Không kết nối được dịch vụ gợi ý.');
+                    return;
+                }
+                appendBubble('assistant', data.reply || '(Không có nội dung)');
+                hist.push({ role: 'user', content: msg });
+                hist.push({ role: 'assistant', content: data.reply || '' });
+                window.__ragHistory = hist.slice(-10);
+            } catch (e) {
+                appendBubble('assistant', 'Lỗi mạng hoặc máy chủ.');
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+        sendBtn.addEventListener('click', sendChat);
+        input.addEventListener('keydown', function(e){ if (e.key === 'Enter') sendChat(); });
+    })();
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

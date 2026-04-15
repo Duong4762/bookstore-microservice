@@ -3,6 +3,7 @@ from . import views
 from . import staff_views
 
 urlpatterns = [
+    path('api/chat/', views.chat_api, name='chat_api'),
     path('', views.home, name='home'),
     path('products/<int:product_id>/', views.product_detail, name='product_detail'),
     path('products/<int:product_id>/add-to-cart/', views.add_to_cart, name='add_to_cart'),

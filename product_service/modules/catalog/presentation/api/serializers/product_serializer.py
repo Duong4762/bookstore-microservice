@@ -2,8 +2,98 @@
 Serializers for Product and Variant
 """
 from rest_framework import serializers
+from django.db.models import Sum
 from modules.catalog.infrastructure.models import ProductModel, VariantModel
 from .category_serializer import CategorySimpleSerializer, BrandSerializer
+
+
+_ATTRIBUTE_LABELS = {
+    'cpu': 'CPU',
+    'chipset': 'Chipset',
+    'ram': 'RAM',
+    'storage': 'Dung lượng lưu trữ',
+    'screen_size': 'Kích thước màn hình',
+    'resolution': 'Độ phân giải',
+    'panel': 'Tấm nền',
+    'refresh_rate': 'Tần số quét',
+    'sensor': 'Cảm biến',
+    'lens': 'Ống kính / ngàm',
+    'battery': 'Pin',
+    'connectivity': 'Kết nối',
+    'speed': 'Tốc độ',
+    'ports': 'Cổng kết nối',
+    'power': 'Công suất',
+    'warranty': 'Bảo hành',
+    'compatibility': 'Tương thích',
+    'platform': 'Nền tảng',
+    'author': 'Tác giả',
+    'isbn': 'ISBN',
+    'pages': 'Số trang',
+    'language': 'Ngôn ngữ',
+    'publication_year': 'Năm xuất bản',
+}
+
+_PREFERRED_ATTRIBUTE_ORDER = (
+    'cpu', 'chipset', 'ram', 'storage', 'screen_size',
+    'resolution', 'panel', 'refresh_rate', 'sensor', 'lens',
+    'battery', 'connectivity', 'speed', 'ports', 'power',
+    'warranty', 'compatibility', 'platform', 'author', 'isbn',
+    'pages', 'language', 'publication_year',
+)
+
+
+def _build_rich_description(obj: ProductModel) -> str:
+    base = (obj.description or '').strip()
+    attrs = obj.attributes or {}
+    if not isinstance(attrs, dict):
+        attrs = {}
+
+    parts = []
+    if base:
+        parts.append(base)
+
+    brand_name = getattr(getattr(obj, 'brand', None), 'name', '') or ''
+    category_name = getattr(getattr(obj, 'category', None), 'name', '') or ''
+    if brand_name or category_name:
+        info = 'Danh mục/Hãng: '
+        if category_name and brand_name:
+            info += f'{category_name} - {brand_name}'
+        else:
+            info += category_name or brand_name
+        parts.append(info)
+
+    ordered_keys = [k for k in _PREFERRED_ATTRIBUTE_ORDER if k in attrs]
+    ordered_keys.extend([k for k in attrs.keys() if k not in ordered_keys])
+    specs = []
+    for key in ordered_keys:
+        value = attrs.get(key)
+        if value in (None, ''):
+            continue
+        label = _ATTRIBUTE_LABELS.get(key, key.replace('_', ' ').capitalize())
+        specs.append(f'{label}: {value}')
+    if specs:
+        parts.append(f'Thông số nổi bật: {" | ".join(specs[:10])}')
+
+    variants = obj.variants.filter(is_active=True).order_by('price')
+    if variants.exists():
+        first_variant = variants.first()
+        last_variant = variants.last()
+        stock_agg = variants.aggregate(total=Sum('stock'))
+        total_stock = int(stock_agg.get('total') or 0)
+        variant_count = variants.count()
+        if first_variant and last_variant:
+            min_price = f'{first_variant.price}'
+            max_price = f'{last_variant.price}'
+            if min_price == max_price:
+                price_text = f'Giá tham khảo: {min_price}'
+            else:
+                price_text = f'Giá tham khảo: từ {min_price} đến {max_price}'
+            stock_text = f'tổng tồn kho: {total_stock}'
+            parts.append(f'{price_text}; số biến thể: {variant_count}; {stock_text}')
+
+    if not parts:
+        return ''
+    return '. '.join(p.rstrip('. ') for p in parts if p).strip() + '.'
 
 
 class VariantSerializer(serializers.ModelSerializer):
@@ -69,6 +159,11 @@ class ProductSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['description'] = _build_rich_description(instance)
+        return data
+
 
 class ProductListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views — no nested variants"""
@@ -105,3 +200,8 @@ class ProductListSerializer(serializers.ModelSerializer):
             chosen = variants.order_by('price').first()
             return getattr(chosen, 'cover_image_url', None)
         return None
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['description'] = _build_rich_description(instance)
+        return data
