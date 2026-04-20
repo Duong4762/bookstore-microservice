@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from recommendation.services.realtime_graph import on_event_logged
+from recommendation.services.embedding_cache import UserEmbeddingCache
 from recommendation.services.retrain_runtime import notify_new_events
 
 from .models import EventLog
@@ -73,7 +73,7 @@ class EventCollectorView(APIView):
         if result_status == 'duplicate':
             return Response({'status': 'duplicate'}, status=status.HTTP_200_OK)
 
-        on_event_logged(event)
+        UserEmbeddingCache.invalidate(event.user_id)
         notify_new_events(1)
         return Response({'status': 'ok', 'id': event.id}, status=status.HTTP_201_CREATED)
 
@@ -90,7 +90,7 @@ class BatchEventCollectorView(APIView):
         for event_data in serializer.validated_data['events']:
             event, result_status = _save_event(event_data)
             if result_status == 'ok' and event:
-                on_event_logged(event)
+                UserEmbeddingCache.invalidate(event.user_id)
             results.append({
                 'status': result_status,
                 'id': event.id if event and result_status == 'ok' else None,

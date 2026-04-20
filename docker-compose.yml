@@ -232,6 +232,18 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
 
+  # ── Neo4j (graph database) ─────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    volumes:
+      - neo4j_data:/data
+    restart: unless-stopped
+
   # Seed product data automatically after product schema is ready
   product-seed:
     image: postgres:16-alpine
@@ -305,3 +317,4 @@ services:
 volumes:
   redis_data:
   postgres_data:
+  neo4j_data:

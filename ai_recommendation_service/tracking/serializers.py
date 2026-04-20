@@ -1,6 +1,8 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from recommendation.services.product_groups import ALL_PRODUCT_IDS
+
 from .models import EventLog
 
 VALID_DEVICES = {'desktop', 'mobile', 'tablet', 'unknown'}
@@ -24,6 +26,13 @@ class EventLogSerializer(serializers.Serializer):
 
     def validate_device(self, value):
         return value.lower() if value.lower() in VALID_DEVICES else 'unknown'
+
+    def validate_product_id(self, value):
+        if value is None:
+            return value
+        if value not in ALL_PRODUCT_IDS:
+            raise serializers.ValidationError('product_id must belong to configured product groups (1..300).')
+        return value
 
     def validate(self, attrs):
         if attrs['event_type'] in ('product_view', 'product_click', 'add_to_cart', 'purchase'):

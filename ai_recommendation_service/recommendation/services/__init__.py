@@ -1,1 +1,1 @@
-"""Tách lớp: graph → model → serving (inference / FAISS)."""
+"""Recommendation services: data ingestion, BiLSTM training, and inference."""

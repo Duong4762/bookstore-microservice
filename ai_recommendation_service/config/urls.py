@@ -10,7 +10,7 @@ def health_check(request):
     return JsonResponse(
         {
             'status': 'ok',
-            'service': 'ai-recommendation-gnn',
+            'service': 'ai-recommendation-bilstm',
             'ml_ready': eng.is_ready,
             'load_error': eng.load_error,
         }

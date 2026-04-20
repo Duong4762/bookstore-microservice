@@ -16,7 +16,7 @@ class UserEmbeddingCache:
 
     @staticmethod
     def _key(user_id: int) -> str:
-        prefix = settings.RECOMMENDATION_ML.get('CACHE_KEY_PREFIX', 'gnn_rec:user_emb:')
+        prefix = settings.RECOMMENDATION_ML.get('CACHE_KEY_PREFIX', 'bilstm_rec:user:')
         return f'{prefix}{user_id}'
 
     @classmethod

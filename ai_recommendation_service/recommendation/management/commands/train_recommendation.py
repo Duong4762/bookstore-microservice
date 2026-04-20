@@ -1,4 +1,4 @@
-"""Chạy toàn bộ pipeline huấn luyện (graph → preprocess → GNN → FAISS)."""
+"""Chạy pipeline huấn luyện BiLSTM từ interaction log."""
 import logging
 
 from django.core.management.base import BaseCommand
@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Rebuild knowledge graph, train heterogeneous GraphSAGE (BPR), rebuild FAISS index'
+    help = 'Train/retrain BiLSTM model for next-product recommendation'
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.NOTICE('Bắt đầu pipeline huấn luyện...'))
+        self.stdout.write(self.style.NOTICE('Bắt đầu pipeline huấn luyện BiLSTM...'))
         try:
             result = run_full_training_pipeline()
             self.stdout.write(self.style.SUCCESS(str(result)))

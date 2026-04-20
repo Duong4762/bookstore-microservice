@@ -1,268 +1,172 @@
-"""
-Huấn luyện GNN với BPR (pairwise ranking) trên bộ ba (user, pos_product, neg_product).
-
-Đánh giá: tách một phần cạnh user–product làm test, tính Recall@K / Precision@K
-bằng nearest neighbor trên embedding sản phẩm (giống serving).
-"""
+"""BiLSTM trainer for next-product recommendation from interaction logs."""
 from __future__ import annotations
 
+import json
 import logging
-import random
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import torch
-import torch.nn.functional as F
-from torch_geometric.data import HeteroData
-
+import pandas as pd
 from django.conf import settings
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Bidirectional, Concatenate, Dense, Dropout, Embedding, Input, LSTM
+from tensorflow.keras.metrics import SparseTopKCategoricalAccuracy
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-from .faiss_index import ProductFaissIndex
-from .gnn_model import HeteroGraphSAGEModel
-from .graph_preprocess import (
-    EDGE_SPECS,
-    edge_weight_dict_from_data,
-    load_heterodata_bundle,
-    save_heterodata,
-    storage_to_heterodata,
-)
-from .graph_builder import GraphBuilder
-from .graph_storage import NetworkXGraphStorage
-from .metrics import precision_at_k, recall_at_k
+from tracking.models import EventLog
 
 logger = logging.getLogger(__name__)
 
-
-def _num_nodes_dict(data: HeteroData) -> Dict[str, int]:
-    return {nt: data[nt].num_nodes for nt in ('user', 'product', 'category', 'query')}
-
-
-def _interaction_pairs(data: HeteroData) -> List[Tuple[int, int]]:
-    ei = data['user', 'interacts', 'product'].edge_index
-    if ei.numel() == 0:
-        return []
-    return list(zip(ei[0].tolist(), ei[1].tolist()))
-
-
-def _train_val_split(
-    pairs: List[Tuple[int, int]],
-    val_ratio: float,
-    seed: int,
-) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:
-    rng = random.Random(seed)
-    shuffled = pairs[:]
-    rng.shuffle(shuffled)
-    n_val = max(1, int(len(shuffled) * val_ratio)) if len(shuffled) > 2 else 1
-    if len(shuffled) <= n_val:
-        return shuffled, []
-    return shuffled[n_val:], shuffled[:n_val]
+ACTION_ID_MAP = {
+    'view': 1,
+    'click': 2,
+    'add_to_cart': 3,
+}
+EVENT_TO_ACTION = {
+    EventLog.EventType.PRODUCT_VIEW: 'view',
+    EventLog.EventType.PRODUCT_CLICK: 'click',
+    EventLog.EventType.ADD_TO_CART: 'add_to_cart',
+    EventLog.EventType.PURCHASE: 'add_to_cart',
+}
 
 
-def train_gnn(
-    data: HeteroData,
-    mappings: Dict[str, Any],
-    epochs: int,
-    lr: float,
-    device: torch.device,
-    val_ratio: float = 0.1,
-    seed: int = 42,
-) -> Tuple[HeteroGraphSAGEModel, Dict[str, float]]:
-    ml = settings.RECOMMENDATION_ML
-    hidden = int(ml['GNN_HIDDEN_DIM'])
-    out_dim = int(ml['GNN_OUT_DIM'])
-    neg_ratio = int(ml['BPR_NUM_NEGATIVES'])
-
-    pairs = _interaction_pairs(data)
-    if len(pairs) < 4:
-        raise RuntimeError('Không đủ cạnh user–product để huấn luyện (cần ít nhất vài tương tác).')
-
-    train_pairs, val_pairs = _train_val_split(pairs, val_ratio, seed)
-    product_stoi: Dict[int, int] = mappings['product_stoi']
-    num_products = data['product'].num_nodes
-    all_products = list(range(num_products))
-
-    # user -> positive product indices (train only)
-    user_pos: Dict[int, Set[int]] = {}
-    for u, p in train_pairs:
-        user_pos.setdefault(u, set()).add(p)
-
-    model = HeteroGraphSAGEModel(hidden, out_dim, _num_nodes_dict(data)).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
-
-    data = data.to(device)
-    ew = {k: v.to(device) for k, v in edge_weight_dict_from_data(data).items()}
-
-    def forward_emb():
-        out = model.forward(data, edge_weight_dict=ew)
-        u = F.normalize(out['user'], dim=-1)
-        p = F.normalize(out['product'], dim=-1)
-        return u, p
-
-    best_val = -1.0
-    metrics_out: Dict[str, float] = {}
-
-    for epoch in range(epochs):
-        model.train()
-        random.shuffle(train_pairs)
-        total_loss = 0.0
-        n_batches = 0
-        batch_size = int(ml['BATCH_SIZE'])
-        for i in range(0, len(train_pairs), batch_size):
-            batch = train_pairs[i : i + batch_size]
-            if not batch:
-                continue
-            users = torch.tensor([b[0] for b in batch], device=device, dtype=torch.long)
-            pos = torch.tensor([b[1] for b in batch], device=device, dtype=torch.long)
-            negs = []
-            for u, pp in batch:
-                for _ in range(neg_ratio):
-                    n = random.choice(all_products)
-                    while n in user_pos.get(u, set()) or n == pp:
-                        n = random.choice(all_products)
-                    negs.append(n)
-            neg = torch.tensor(negs, device=device, dtype=torch.long).view(len(batch), neg_ratio)
-
-            opt.zero_grad()
-            u_emb, p_emb = forward_emb()
-            u_v = u_emb[users]
-            pos_v = p_emb[pos]
-            loss_acc = None
-            for k in range(neg_ratio):
-                neg_v = p_emb[neg[:, k]]
-                pos_s = (u_v * pos_v).sum(dim=-1)
-                neg_s = (u_v * neg_v).sum(dim=-1)
-                diff = pos_s - neg_s
-                bpr = -F.logsigmoid(diff).mean()
-                loss_acc = bpr if loss_acc is None else loss_acc + bpr
-            assert loss_acc is not None
-            loss = loss_acc / neg_ratio
-            loss.backward()
-            opt.step()
-            total_loss += float(loss.item())
-            n_batches += 1
-
-        # Validation: Recall@K via FAISS on product side
-        model.eval()
-        with torch.no_grad():
-            u_emb, p_emb = model.user_product_embeddings(data, ew)
-            u_np = u_emb.cpu().numpy()
-            p_np = p_emb.cpu().numpy()
-            itos = mappings['product_itos']
-            faiss_idx = ProductFaissIndex()
-            faiss_idx.build(p_np, [int(x) for x in itos])
-
-            k_eval = int(ml['EVAL_K'])
-            recalls = []
-            precs = []
-            val_users: Dict[int, Set[int]] = {}
-            for u, p in val_pairs:
-                val_users.setdefault(u, set()).add(p)
-            for u_idx, rel in val_users.items():
-                q = u_np[u_idx]
-                rec_rows, _ = faiss_idx.search(q, k_eval + 20)
-                rec_pidx = []
-                for ext_pid in rec_rows:
-                    ii = product_stoi.get(ext_pid)
-                    if ii is not None and ii not in rel:
-                        rec_pidx.append(ext_pid)
-                    if len(rec_pidx) >= k_eval:
-                        break
-                rel_ext = {itos[i] for i in rel}
-                recalls.append(recall_at_k(rec_pidx, set(rel_ext), k_eval))
-                precs.append(precision_at_k(rec_pidx, set(rel_ext), k_eval))
-
-            val_recall = float(np.mean(recalls)) if recalls else 0.0
-            val_prec = float(np.mean(precs)) if precs else 0.0
-            metrics_out = {'recall@k': val_recall, 'precision@k': val_prec, 'epoch': float(epoch)}
-
-        logger.info(
-            'Epoch %d/%d loss=%.4f recall@%d=%.4f precision@%d=%.4f',
-            epoch + 1,
-            epochs,
-            total_loss / max(n_batches, 1),
-            k_eval,
-            val_recall,
-            k_eval,
-            val_prec,
+def _to_dataframe() -> pd.DataFrame:
+    rows = list(
+        EventLog.objects.filter(
+            event_type__in=list(EVENT_TO_ACTION.keys()),
+            product_id__isnull=False,
         )
-        if val_recall > best_val:
-            best_val = val_recall
-            ckpt = Path(ml['MODEL_PATH'])
-            ckpt.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(
-                {
-                    'model_state': model.state_dict(),
-                    'num_nodes_dict': _num_nodes_dict(data),
-                    'hidden_dim': hidden,
-                    'out_dim': out_dim,
-                    'metrics': metrics_out,
-                },
-                ckpt,
-            )
-
-    return model, metrics_out
-
-
-def build_faiss_from_best_checkpoint(data: HeteroData, mappings: Dict[str, Any], device: torch.device) -> None:
-    """Nạp checkpoint tốt nhất, forward toàn đồ thị, xây FAISS trên embedding sản phẩm."""
-    ml = settings.RECOMMENDATION_ML
-    ckpt_path = Path(ml['MODEL_PATH'])
-    if not ckpt_path.exists():
-        raise RuntimeError('Không tìm thấy checkpoint model sau huấn luyện.')
-    try:
-        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-    except TypeError:
-        ckpt = torch.load(ckpt_path, map_location=device)
-    model = HeteroGraphSAGEModel(
-        int(ckpt['hidden_dim']),
-        int(ckpt['out_dim']),
-        ckpt['num_nodes_dict'],
+        .values('user_id', 'product_id', 'event_type', 'timestamp')
+        .order_by('user_id', 'timestamp')
     )
-    model.load_state_dict(ckpt['model_state'])
-    model.to(device)
-    model.eval()
-    d = data.to(device)
-    ew = {k: v.to(device) for k, v in edge_weight_dict_from_data(d).items()}
-    with torch.no_grad():
-        _, p_emb = model.user_product_embeddings(d, ew)
-    p_np = p_emb.cpu().numpy()
-    itos = mappings['product_itos']
-    faiss_idx = ProductFaissIndex()
-    faiss_idx.build(p_np, [int(x) for x in itos])
-    faiss_idx.save(Path(ml['FAISS_DIR']))
+    if not rows:
+        return pd.DataFrame(columns=['user_id', 'product_id', 'action', 'timestamp'])
+    df = pd.DataFrame(rows)
+    df['action'] = df['event_type'].map(EVENT_TO_ACTION)
+    df = df[['user_id', 'product_id', 'action', 'timestamp']]
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    return df
+
+
+def _build_sequences(df: pd.DataFrame, max_len: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray, LabelEncoder]:
+    if df.empty:
+        raise RuntimeError('Không có interaction để huấn luyện BiLSTM.')
+    df = df.sort_values(['user_id', 'timestamp']).reset_index(drop=True)
+    df['time_gap'] = (
+        df.groupby('user_id')['timestamp']
+        .diff()
+        .dt.total_seconds()
+        .fillna(0)
+    )
+    df['new_session'] = (df['time_gap'] > 1800).astype(int)
+    df['session_id'] = df.groupby('user_id')['new_session'].cumsum()
+    df['action_id'] = df['action'].map(ACTION_ID_MAP).astype(int)
+
+    product_encoder = LabelEncoder()
+    df['product_id_enc'] = product_encoder.fit_transform(df['product_id']) + 1
+
+    x_action: List[np.ndarray] = []
+    x_product: List[np.ndarray] = []
+    y: List[int] = []
+    for _, group in df.groupby(['user_id', 'session_id']):
+        actions = group['action_id'].values
+        products = group['product_id_enc'].values
+        if len(group) < 2:
+            continue
+        for i in range(1, len(group)):
+            x_action.append(actions[:i])
+            x_product.append(products[:i])
+            y.append(int(products[i]))
+    if not y:
+        raise RuntimeError('Không đủ chuỗi session để tạo dữ liệu train BiLSTM.')
+
+    x_action_np = pad_sequences(x_action, maxlen=max_len, padding='pre', truncating='pre')
+    x_product_np = pad_sequences(x_product, maxlen=max_len, padding='pre', truncating='pre')
+    y_np = np.asarray(y, dtype=np.int32)
+    return x_action_np, x_product_np, y_np, product_encoder
+
+
+def _build_model(max_len: int, num_products: int) -> Model:
+    input_action = Input(shape=(max_len,))
+    input_product = Input(shape=(max_len,))
+
+    action_emb = Embedding(input_dim=4, output_dim=8)(input_action)
+    product_emb = Embedding(input_dim=num_products, output_dim=64)(input_product)
+    merged = Concatenate()([action_emb, product_emb])
+
+    x = Bidirectional(LSTM(128))(merged)
+    x = Dropout(0.2)(x)
+    x = Dense(128, activation='relu')(x)
+    x = Dropout(0.2)(x)
+    output = Dense(num_products, activation='softmax')(x)
+
+    model = Model(inputs=[input_action, input_product], outputs=output)
+    model.compile(
+        optimizer=Adam(learning_rate=0.001),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy', SparseTopKCategoricalAccuracy(k=10, name='top10_acc')],
+    )
+    return model
 
 
 def run_full_training_pipeline() -> Dict[str, Any]:
-    """Rebuild graph → heterodata → train → FAISS (gọi từ API retrain / management command)."""
     ml = settings.RECOMMENDATION_ML
-    device = torch.device('cuda' if torch.cuda.is_available() and ml['USE_CUDA'] else 'cpu')
+    max_len = int(ml['MAX_SEQUENCE_LEN'])
+    epochs = int(ml['TRAIN_EPOCHS'])
+    batch_size = int(ml['BATCH_SIZE'])
 
-    builder = GraphBuilder(NetworkXGraphStorage())
-    builder.build_from_database(full_rebuild=True)
-    builder.save()
+    df = _to_dataframe()
+    x_action, x_product, y, encoder = _build_sequences(df, max_len=max_len)
+    num_products = len(encoder.classes_) + 1
 
-    data, mappings = storage_to_heterodata(builder.storage)
-    bundle_path = Path(ml['HETERODATA_PATH'])
-    mappings_path = Path(ml['MAPPINGS_JSON_PATH'])
-    save_heterodata(data, mappings, bundle_path, mappings_path)
-
-    data, mappings = load_heterodata_bundle(bundle_path)
-    data = data.to(device)
-
-    _, metrics = train_gnn(
-        data,
-        mappings,
-        epochs=int(ml['TRAIN_EPOCHS']),
-        lr=float(ml['LEARNING_RATE']),
-        device=device,
-        val_ratio=float(ml['VAL_RATIO']),
+    uniq, counts = np.unique(y, return_counts=True)
+    stratify = y if (len(uniq) > 1 and counts.min() >= 2) else None
+    x_a_train, x_a_test, x_p_train, x_p_test, y_train, y_test = train_test_split(
+        x_action,
+        x_product,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=stratify,
     )
 
-    data_cpu, mappings = load_heterodata_bundle(bundle_path)
-    build_faiss_from_best_checkpoint(data_cpu, mappings, device)
+    model = _build_model(max_len=max_len, num_products=num_products)
+    early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+    model.fit(
+        [x_a_train, x_p_train],
+        y_train,
+        validation_split=0.2,
+        epochs=epochs,
+        batch_size=batch_size,
+        callbacks=[early_stop],
+        verbose=1,
+    )
+    loss, acc, top10 = model.evaluate([x_a_test, x_p_test], y_test, verbose=0)
 
-    from .realtime_graph import reset_graph_builder
+    model_path = Path(ml['MODEL_PATH'])
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    model.save(model_path)
 
-    reset_graph_builder()
+    metadata = {
+        'max_len': max_len,
+        'action_id_map': ACTION_ID_MAP,
+        'product_classes': [int(x) for x in encoder.classes_.tolist()],
+    }
+    metadata_path = Path(ml['MODEL_METADATA_PATH'])
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=True), encoding='utf-8')
+
+    metrics = {
+        'test_loss': float(loss),
+        'top1_acc': float(acc),
+        'top10_acc': float(top10),
+        'num_samples': int(len(y)),
+        'num_products': int(num_products - 1),
+    }
+    logger.info('BiLSTM train done: %s', metrics)
     return {'status': 'ok', 'metrics': metrics}
