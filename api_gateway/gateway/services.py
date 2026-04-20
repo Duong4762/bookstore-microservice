@@ -315,7 +315,12 @@ class CartGatewayService:
             return None
 
     @staticmethod
-    def add_item_to_cart(customer_id: int, product_id: int, quantity: int = 1) -> tuple[bool, str]:
+    def add_item_to_cart(
+        customer_id: int,
+        product_id: int,
+        quantity: int = 1,
+        variant_id: Optional[int] = None,
+    ) -> tuple[bool, str]:
         try:
             cart = CartGatewayService._ensure_cart(customer_id)
             if not cart:
@@ -326,6 +331,8 @@ class CartGatewayService:
                 'book_id': product_id,
                 'quantity': quantity,
             }
+            if variant_id:
+                data['variant_id'] = int(variant_id)
             response = requests.post(f'{CART_SERVICE_URL}/cart-items/', json=data, timeout=5)
             if response.status_code in [200, 201]:
                 return True, 'Da them san pham vao gio hang!'

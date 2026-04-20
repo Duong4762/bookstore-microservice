@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Order, OrderItem
 import requests
+import os
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -16,15 +17,18 @@ class OrderItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
     
     def get_book_title(self, obj):
-        """Lấy tên sách từ Book Service"""
+        """Lấy tên sản phẩm từ Product Service."""
         try:
-            book_service_url = f'http://localhost:8002/api/books/{obj.book_id}/'
-            response = requests.get(book_service_url, timeout=5)
+            product_service_base = os.environ.get('PRODUCT_SERVICE_URL', 'http://product-service:8000').rstrip('/')
+            product_url = f'{product_service_base}/api/products/{obj.book_id}/'
+            response = requests.get(product_url, timeout=5)
             if response.status_code == 200:
-                return response.json().get('title', 'Unknown')
+                payload = response.json()
+                # API mới dùng trường name; giữ fallback title cho tương thích.
+                return payload.get('name') or payload.get('title') or f'Sản phẩm #{obj.book_id}'
         except Exception:
             pass
-        return 'Unknown'
+        return f'Sản phẩm #{obj.book_id}'
 
 
 class OrderSerializer(serializers.ModelSerializer):

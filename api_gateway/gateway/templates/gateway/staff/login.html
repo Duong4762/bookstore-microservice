@@ -1,23 +1,23 @@
 {% extends "gateway/staff/base_staff.html" %}
-{% block title %}Dang nhap nhan vien{% endblock %}
+{% block title %}Đăng nhập nhân viên{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-5">
-        <div class="card shadow-sm">
+        <div class="card shadow-sm border-0">
             <div class="card-body p-4">
-                <h1 class="h4 mb-4">Dang nhap nhan vien</h1>
-                <p class="text-muted small">He thong khong ho tro dang ky. Tai khoan duoc cau hinh boi quan tri.</p>
+                <h1 class="h4 mb-3">Đăng nhập nhân viên</h1>
+                <p class="text-muted small mb-4">Hệ thống không hỗ trợ đăng ký. Tài khoản được cấu hình bởi quản trị viên.</p>
                 <form method="post">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label" for="username">Ten dang nhap</label>
+                        <label class="form-label" for="username">Tên đăng nhập</label>
                         <input type="text" class="form-control" id="username" name="username" required autocomplete="username">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="password">Mat khau</label>
+                        <label class="form-label" for="password">Mật khẩu</label>
                         <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
                     </div>
-                    <button type="submit" class="btn btn-dark w-100">Dang nhap</button>
+                    <button type="submit" class="btn btn-dark w-100"><i class="bi bi-box-arrow-in-right"></i> Đăng nhập</button>
                 </form>
             </div>
         </div>

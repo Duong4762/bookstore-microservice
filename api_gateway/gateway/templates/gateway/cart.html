@@ -2,6 +2,28 @@
 
 {% block title %}Giỏ hàng - Bookstore{% endblock %}
 
+{% block extra_css %}
+<style>
+    .cart-card {
+        border: 1px solid #e8edf7;
+        border-radius: 1rem;
+        box-shadow: 0 0.35rem 1.2rem rgba(16, 24, 40, 0.06);
+    }
+    .cart-item-thumb {
+        width: 64px;
+        height: 64px;
+        object-fit: cover;
+        border-radius: 0.6rem;
+        border: 1px solid #e5e7eb;
+        background: #f3f4f6;
+    }
+    .cart-summary {
+        position: sticky;
+        top: 1.25rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container my-5">
     <h1 class="display-5 mb-4">
@@ -10,12 +32,12 @@
 
     {% if cart and cart.items %}
         <div class="row">
-            <div class="col-md-8">
-                <div class="card">
+            <div class="col-lg-8">
+                <div class="card cart-card">
                     <div class="card-body">
                         <h5 class="card-title">Sản phẩm trong giỏ hàng</h5>
                         <div class="table-responsive">
-                            <table class="table">
+                            <table class="table align-middle">
                                 <thead>
                                     <tr>
                                         <th>Sản phẩm</th>
@@ -28,8 +50,24 @@
                                     {% for item in cart.items %}
                                         <tr>
                                             <td>
-                                                <strong>{{ item.product_title|default:item.book_title }}</strong><br>
-                                                <small class="text-muted">ID: {{ item.product_id|default:item.book_id }}</small>
+                                                <div class="d-flex align-items-center gap-3">
+                                                    {% if item.cover_image_url %}
+                                                        <img src="{{ item.cover_image_url }}" alt="{{ item.display_name|default:'Sản phẩm' }}" class="cart-item-thumb">
+                                                    {% else %}
+                                                        <div class="cart-item-thumb d-flex align-items-center justify-content-center text-secondary">
+                                                            <i class="bi bi-box"></i>
+                                                        </div>
+                                                    {% endif %}
+                                                    <div>
+                                                        <a class="text-decoration-none fw-semibold" href="{{ item.product_url|default:'#' }}">
+                                                            {{ item.display_name|default:'Sản phẩm' }}
+                                                        </a><br>
+                                                        <small class="text-muted">ID: {{ item.display_product_id }}</small>
+                                                        {% if item.variant_display %}
+                                                            <br><small class="text-muted">{{ item.variant_display }}</small>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td>{{ item.price|floatformat:0 }} VNĐ</td>
                                             <td>{{ item.quantity }}</td>
@@ -43,8 +81,8 @@
                 </div>
             </div>
             
-            <div class="col-md-4">
-                <div class="card">
+            <div class="col-lg-4">
+                <div class="card cart-card cart-summary">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0">Tóm tắt đơn hàng</h5>
                     </div>
@@ -58,7 +96,7 @@
                             <strong class="text-danger fs-5">{{ cart.total_price|floatformat:0 }} VNĐ</strong>
                         </div>
                         
-                        <hr>
+                        <hr class="my-4">
                         
                         <form method="POST" action="{% url 'create_order' %}">
                             {% csrf_token %}

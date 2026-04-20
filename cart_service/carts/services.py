@@ -87,7 +87,12 @@ class CartItemService:
     """Service class xử lý business logic cho CartItem"""
     
     @staticmethod
-    def add_item_to_cart(cart_id: int, book_id: int, quantity: int = 1) -> CartItem:
+    def add_item_to_cart(
+        cart_id: int,
+        book_id: int,
+        variant_id: Optional[int] = None,
+        quantity: int = 1,
+    ) -> CartItem:
         """
         Thêm sách vào giỏ hàng hoặc cập nhật số lượng nếu đã tồn tại
         
@@ -112,8 +117,24 @@ class CartItemService:
         if not book_info:
             raise ValueError("Book not found")
         
-        # product_service trả dữ liệu theo nhiều shape; ưu tiên price trực tiếp.
-        raw_price = book_info.get('price')
+        # Nếu có variant_id thì ưu tiên giá từ biến thể được chọn.
+        raw_price = None
+        if variant_id is not None and isinstance(book_info.get('variants'), list):
+            for var in book_info.get('variants') or []:
+                if not isinstance(var, dict):
+                    continue
+                try:
+                    vid = int(var.get('id'))
+                except (TypeError, ValueError):
+                    continue
+                if vid == int(variant_id):
+                    raw_price = var.get('price')
+                    break
+            if raw_price is None:
+                raise ValueError("Variant not found")
+        # fallback theo sản phẩm
+        if raw_price is None:
+            raw_price = book_info.get('price')
         if raw_price is None:
             raw_price = book_info.get('min_price')
         if raw_price is None and isinstance(book_info.get('variants'), list) and book_info['variants']:
@@ -127,6 +148,7 @@ class CartItemService:
         cart_item, created = CartItem.objects.get_or_create(
             cart_id=cart_id,
             book_id=book_id,
+            variant_id=variant_id,
             defaults={'price': price, 'quantity': quantity}
         )
         

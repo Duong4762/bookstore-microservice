@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import requests
 from django.conf import settings
 
-from catalog_proxy.client import get_product, get_products_bulk, search_products
+from catalog_proxy.client import get_product, get_products_bulk, list_products, search_products
 
 from .graph_storage import NodeType
 from .inference import RecommendEngine
@@ -29,6 +29,10 @@ _QA_INTENT = re.compile(
 )
 _REC_INTENT = re.compile(
     r'(gợi\s*ý|đề\s*xuất|nên\s*mua|recommend|sản\s*phẩm\s*nào|mua\s*gì|phù\s*hợp\s*với)',
+    re.IGNORECASE,
+)
+_FILTER_INTENT = re.compile(
+    r'(lớn\s*hơn|nhỏ\s*hơn|trên|dưới|từ|đến|trở\s*lên|tối\s*thiểu|tối\s*đa|ram|storage|dung\s*lượng|giá|hãng|thương\s*hiệu|laptop|điện\s*thoại|tablet)',
     re.IGNORECASE,
 )
 
@@ -97,6 +101,272 @@ def _extract_search_query(message: str) -> str:
     s = re.sub(r'[^\w\s\u00C0-\u024f]', ' ', s, flags=re.UNICODE)
     s = ' '.join(s.split()).strip()
     return (s[:120] if s else (message or '').strip()[:120])
+
+
+def _to_float(raw: str) -> Optional[float]:
+    if raw is None:
+        return None
+    s = str(raw).strip().lower().replace(',', '.')
+    s = re.sub(r'[^\d\.]', '', s)
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _capacity_to_gb(text: str) -> Optional[float]:
+    if not text:
+        return None
+    m = re.search(r'(\d+(?:[.,]\d+)?)\s*(tb|gb|mb)?', text.lower())
+    if not m:
+        return None
+    num = _to_float(m.group(1))
+    if num is None:
+        return None
+    unit = (m.group(2) or 'gb').lower()
+    if unit == 'tb':
+        return num * 1024
+    if unit == 'mb':
+        return num / 1024
+    return num
+
+
+def _price_to_vnd(text: str) -> Optional[float]:
+    if not text:
+        return None
+    lower = text.lower()
+    m = re.search(r'(\d+(?:[.,]\d+)?)', lower)
+    if not m:
+        return None
+    num = _to_float(m.group(1))
+    if num is None:
+        return None
+    if re.search(r'(triệu|tr\b)', lower):
+        return num * 1_000_000
+    if re.search(r'(nghìn|k\b)', lower):
+        return num * 1_000
+    return num
+
+
+def _extract_numeric_constraint(message: str, field_pattern: str, parser) -> Dict[str, float]:
+    out: Dict[str, float] = {}
+    low = (message or '').lower()
+    matches = list(re.finditer(field_pattern, low, flags=re.IGNORECASE))
+    if not matches:
+        return out
+    for m in matches:
+        segment = low[m.start():min(len(low), m.end() + 40)]
+        v = parser(segment)
+        if v is None:
+            continue
+        if re.search(r'(nhỏ\s*hơn|dưới|tối\s*đa|không\s*quá|<=)', segment):
+            out['max'] = v
+        elif re.search(r'(lớn\s*hơn|trên|tối\s*thiểu|ít\s*nhất|trở\s*lên|>=)', segment):
+            out['min'] = v
+        else:
+            if re.search(r'từ', segment) and re.search(r'(đến|tới)', segment):
+                if 'min' not in out:
+                    out['min'] = v
+            else:
+                # Mặc định "ram 8gb" => min
+                out['min'] = v
+    return out
+
+
+def _extract_price_range(message: str) -> Dict[str, float]:
+    out: Dict[str, float] = {}
+    low = (message or '').lower()
+    between = re.search(
+        r'giá[^0-9]{0,20}từ[^0-9]*(\d+(?:[.,]\d+)?\s*(?:triệu|tr|k|nghìn)?)\s*(?:đến|tới|-)\s*(\d+(?:[.,]\d+)?\s*(?:triệu|tr|k|nghìn)?)',
+        low,
+    )
+    if between:
+        lo = _price_to_vnd(between.group(1))
+        hi = _price_to_vnd(between.group(2))
+        if lo is not None:
+            out['min'] = lo
+        if hi is not None:
+            out['max'] = hi
+        return out
+    single = _extract_numeric_constraint(low, r'giá', _price_to_vnd)
+    if 'min' in single:
+        out['min'] = single['min']
+    if 'max' in single:
+        out['max'] = single['max']
+    return out
+
+
+def _extract_filter_spec(message: str) -> Dict[str, Any]:
+    text = (message or '').lower()
+    spec: Dict[str, Any] = {
+        'category': '',
+        'brand': '',
+        'ram': {},
+        'storage': {},
+        'price': {},
+    }
+    category_map = {
+        'laptop': 'laptop',
+        'điện thoại': 'điện thoại',
+        'dien thoai': 'điện thoại',
+        'phone': 'điện thoại',
+        'tablet': 'tablet',
+        'ipad': 'tablet',
+        'monitor': 'monitor',
+    }
+    for k, v in category_map.items():
+        if k in text:
+            spec['category'] = v
+            break
+    b = re.search(r'(?:hãng|thương\s*hiệu|brand)\s*([a-z0-9\-\s]{2,30})', text)
+    if b:
+        spec['brand'] = b.group(1).strip()
+    spec['ram'] = _extract_numeric_constraint(text, r'ram', _capacity_to_gb)
+    spec['storage'] = _extract_numeric_constraint(
+        text, r'(?:storage|dung\s*lượng|dung\s*luong|bộ\s*nhớ|bo\s*nho|rom)', _capacity_to_gb
+    )
+    spec['price'] = _extract_price_range(text)
+    return spec
+
+
+def _get_name_field(product: Dict[str, Any], key: str) -> str:
+    if key == 'category':
+        return (
+            str(product.get('category_name') or '').strip()
+            or str(((product.get('category') or {}) if isinstance(product.get('category'), dict) else {}).get('name') or '').strip()
+        )
+    if key == 'brand':
+        return (
+            str(product.get('brand_name') or '').strip()
+            or str(((product.get('brand') or {}) if isinstance(product.get('brand'), dict) else {}).get('name') or '').strip()
+        )
+    return ''
+
+
+def _product_metric_values(product: Dict[str, Any], metric: str) -> List[float]:
+    keys = ('ram',) if metric == 'ram' else ('storage', 'dung_luong', 'rom')
+    vals: List[float] = []
+    attrs = product.get('attributes') if isinstance(product.get('attributes'), dict) else {}
+    for k in keys:
+        if k in attrs:
+            v = _capacity_to_gb(str(attrs.get(k)))
+            if v is not None:
+                vals.append(v)
+    variants = product.get('variants') if isinstance(product.get('variants'), list) else []
+    for var in variants:
+        if not isinstance(var, dict):
+            continue
+        vattrs = var.get('attributes') if isinstance(var.get('attributes'), dict) else {}
+        for k in keys:
+            if k in vattrs:
+                v = _capacity_to_gb(str(vattrs.get(k)))
+                if v is not None:
+                    vals.append(v)
+    return vals
+
+
+def _product_price(product: Dict[str, Any]) -> Optional[float]:
+    min_price = product.get('min_price')
+    if min_price is not None:
+        v = _to_float(str(min_price))
+        if v is not None:
+            return v
+    variants = product.get('variants') if isinstance(product.get('variants'), list) else []
+    prices: List[float] = []
+    for var in variants:
+        if not isinstance(var, dict):
+            continue
+        v = _to_float(str(var.get('price')))
+        if v is not None:
+            prices.append(v)
+    if prices:
+        return min(prices)
+    return None
+
+
+def _match_filter(product: Dict[str, Any], spec: Dict[str, Any]) -> bool:
+    cat = (spec.get('category') or '').strip().lower()
+    if cat:
+        cat_name = _get_name_field(product, 'category').lower()
+        if cat not in cat_name:
+            return False
+    brand = (spec.get('brand') or '').strip().lower()
+    if brand:
+        brand_name = _get_name_field(product, 'brand').lower()
+        if brand not in brand_name:
+            return False
+    for metric in ('ram', 'storage'):
+        cond = spec.get(metric) or {}
+        if not cond:
+            continue
+        vals = _product_metric_values(product, metric)
+        if not vals:
+            return False
+        low = cond.get('min')
+        high = cond.get('max')
+        if low is not None and max(vals) < float(low):
+            return False
+        if high is not None and min(vals) > float(high):
+            return False
+    price_cond = spec.get('price') or {}
+    if price_cond:
+        p = _product_price(product)
+        if p is None:
+            return False
+        if price_cond.get('min') is not None and p < float(price_cond['min']):
+            return False
+        if price_cond.get('max') is not None and p > float(price_cond['max']):
+            return False
+    return True
+
+
+def _has_filter_spec(spec: Dict[str, Any]) -> bool:
+    return any(
+        [
+            spec.get('category'),
+            spec.get('brand'),
+            bool(spec.get('ram')),
+            bool(spec.get('storage')),
+            bool(spec.get('price')),
+        ]
+    )
+
+
+def _filter_products_by_message(message: str, *, limit: int = 24) -> Tuple[List[int], Dict[str, Any]]:
+    if not _FILTER_INTENT.search(message or ''):
+        return [], {'active': False}
+    spec = _extract_filter_spec(message)
+    if not _has_filter_spec(spec):
+        return [], {'active': False, 'reason': 'no_structured_filter'}
+    # Không dùng search text ở bước lọc structured để tránh query quá chặt làm rỗng dữ liệu.
+    rows = list_products(limit=300, search='')
+    ids: List[int] = []
+    checked = 0
+    need_rich = bool(spec.get('ram') or spec.get('storage') or spec.get('price') or spec.get('brand') or spec.get('category'))
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        rid = r.get('id')
+        if rid is None:
+            continue
+        try:
+            pid = int(rid)
+        except (TypeError, ValueError):
+            continue
+        candidate = r
+        if need_rich:
+            # List API thường thiếu attributes/variants; lấy detail để lọc chính xác.
+            detail = get_product(pid)
+            if isinstance(detail, dict):
+                candidate = detail
+            checked += 1
+        if _match_filter(candidate, spec):
+            ids.append(pid)
+            if len(ids) >= limit:
+                break
+    return ids, {'active': True, 'spec': spec, 'query': '', 'matched': len(ids), 'checked': checked}
 
 
 def _match_pids_from_message(message: str, pid_to_meta: Dict[int, Dict]) -> List[int]:
@@ -510,6 +780,45 @@ def generate_rag_reply(
     history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     ctx, pids, meta = build_graph_context(message, user_id=user_id)
+    filtered_ids, fmeta = _filter_products_by_message(message, limit=24)
+    meta['structured_filter'] = fmeta
+    if fmeta.get('active'):
+        if filtered_ids:
+            pids = filtered_ids
+            bulk = get_products_bulk(pids[:12])
+            lines = ['## Kết quả lọc theo yêu cầu thuộc tính']
+            spec = fmeta.get('spec') or {}
+            if spec.get('category'):
+                lines.append(f"- Danh mục: {spec['category']}")
+            if spec.get('brand'):
+                lines.append(f"- Thương hiệu: {spec['brand']}")
+            if spec.get('ram'):
+                lines.append(f"- RAM: {spec['ram']}")
+            if spec.get('storage'):
+                lines.append(f"- Dung lượng: {spec['storage']}")
+            if spec.get('price'):
+                lines.append(f"- Giá: {spec['price']}")
+            for pid in pids[:12]:
+                p = bulk.get(pid) or {}
+                name = p.get('name') or f'sản phẩm #{pid}'
+                price = p.get('min_price')
+                extra = f'; giá tham khảo: {price}' if price is not None else ''
+                lines.append(f'- [{pid}] {name}{extra}')
+            ctx = '\n'.join(lines) + '\n\n' + ctx
+            meta['recommend_source'] = 'structured_filter_catalog'
+        else:
+            reply = (
+                'Mình đã lọc theo yêu cầu nhưng chưa thấy sản phẩm phù hợp trong catalog hiện tại. '
+                'Bạn có thể nới điều kiện (ví dụ tăng ngân sách hoặc đổi thương hiệu) để mình gợi ý lại.'
+            )
+            return {
+                'reply': reply,
+                'mode': 'template',
+                'context': ctx,
+                'product_ids': [],
+                'meta': meta,
+            }
+
     focus_pids, focus_source = _resolve_focus_product_ids(message, pids)
     meta['focus_product_ids'] = focus_pids
     meta['focus_source'] = focus_source

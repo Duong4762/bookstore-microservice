@@ -100,6 +100,19 @@
                 <form method="POST" action="{% url 'add_to_cart' product.id %}" class="mt-4">
                     {% csrf_token %}
                     <div class="row g-3">
+                        {% if product.selectable_variants %}
+                        <div class="col-md-12">
+                            <label class="form-label">Chọn biến thể:</label>
+                            <select name="variant_id" class="form-select">
+                                <option value="">Mặc định</option>
+                                {% for v in product.selectable_variants %}
+                                    <option value="{{ v.id }}">
+                                        {{ v.label }}{% if v.price %} — {{ v.price }} VNĐ{% endif %}{% if v.stock %} (còn {{ v.stock }}){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
                         <div class="col-md-8">
                             <label class="form-label">Số lượng:</label>
                             <input type="number" name="quantity" class="form-control" value="1" min="1" max="{{ product.stock_quantity }}">

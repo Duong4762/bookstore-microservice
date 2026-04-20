@@ -81,6 +81,7 @@ class CartItemViewSet(viewsets.ModelViewSet):
         """POST /cart-items/ - Thêm sách vào giỏ hàng"""
         cart_id = request.data.get('cart_id')
         book_id = request.data.get('book_id')
+        variant_id = request.data.get('variant_id')
         quantity = request.data.get('quantity', 1)
         
         if not cart_id or not book_id:
@@ -93,6 +94,7 @@ class CartItemViewSet(viewsets.ModelViewSet):
             cart_item = CartItemService.add_item_to_cart(
                 cart_id=cart_id,
                 book_id=book_id,
+                variant_id=int(variant_id) if variant_id not in (None, '', 'null') else None,
                 quantity=int(quantity)
             )
             serializer = self.get_serializer(cart_item)

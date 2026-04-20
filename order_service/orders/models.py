@@ -14,7 +14,7 @@ class Order(models.Model):
     
     customer_id = models.IntegerField()  # ID của customer từ Customer Service
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2)
     shipping_address = models.TextField()
     phone_number = models.CharField(max_length=20)
     notes = models.TextField(blank=True, null=True)
@@ -35,7 +35,7 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
     book_id = models.IntegerField()  # ID của book từ Book Service
     quantity = models.IntegerField(default=1)
-    price = models.DecimalField(max_digits=10, decimal_places=2)  # Giá tại thời điểm đặt hàng
+    price = models.DecimalField(max_digits=14, decimal_places=2)  # Giá tại thời điểm đặt hàng
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

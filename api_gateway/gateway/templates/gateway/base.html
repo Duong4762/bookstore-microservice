@@ -15,6 +15,7 @@
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            background: #f4f7fb;
         }
         .main-content {
             flex: 1;
@@ -22,6 +23,30 @@
         .navbar-brand {
             font-weight: bold;
             font-size: 1.5rem;
+        }
+        .navbar .navbar-nav {
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .navbar .nav-link {
+            border-radius: 0.5rem;
+            padding: 0.45rem 0.7rem;
+        }
+        .navbar .nav-link:hover {
+            background: rgba(255, 255, 255, 0.14);
+        }
+        .navbar-user-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin: 0;
+            line-height: 1.2;
+            padding: 0.45rem 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-weight: 500;
         }
         .footer {
             background-color: #f8f9fa;
@@ -38,6 +63,48 @@
         }
         .star-rating {
             color: #ffc107;
+        }
+        #chat-panel {
+            border: 0;
+            border-radius: 1rem;
+            overflow: hidden;
+            backdrop-filter: blur(2px);
+        }
+        #chat-panel .card-header {
+            background: linear-gradient(120deg, #0d6efd, #0056b3) !important;
+            font-weight: 600;
+        }
+        #chat-messages {
+            background: linear-gradient(180deg, #f8fbff, #f2f5ff);
+        }
+        .chat-bubble {
+            border-radius: 0.85rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        .chat-bubble-user {
+            background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+            color: #fff;
+        }
+        .chat-bubble-assistant {
+            background: #fff;
+            border: 1px solid #dbe7ff;
+            color: #1f2937;
+        }
+        #chat-input {
+            border-radius: 0.6rem 0 0 0.6rem;
+            border-color: #d6e2ff;
+        }
+        #chat-send {
+            border-radius: 0 0.6rem 0.6rem 0;
+            padding-inline: 0.9rem;
+        }
+        #chat-fab {
+            background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+            border: none;
+        }
+        #chat-fab:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.6rem 1.4rem rgba(13, 110, 253, 0.35) !important;
         }
     </style>
     
@@ -57,7 +124,7 @@
                 <ul class="navbar-nav ms-auto">
                     {% if request.session.current_customer_id %}
                     <li class="nav-item">
-                        <span class="navbar-text me-3 text-light">
+                        <span class="navbar-user-badge">
                             <i class="bi bi-person-check"></i>
                             {% if current_customer and current_customer.full_name %}
                                 {{ current_customer.full_name }}
@@ -137,7 +204,7 @@
     <div id="chat-widget" class="position-fixed" style="bottom:1.25rem;right:1.25rem;z-index:1050;">
         <div id="chat-panel" class="card shadow d-none" style="width:min(100vw - 2rem, 380px); min-height:260px; max-height:min(70vh, 460px); margin-bottom:0.5rem;">
             <div class="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
-                <span class="small"><i class="bi bi-stars"></i> Trợ lý (RAG + Gemini)</span>
+                <span class="small"><i class="bi bi-stars"></i> Trợ lý</span>
                 <button type="button" class="btn-close btn-close-white" id="chat-close" aria-label="Đóng"></button>
             </div>
             <div id="chat-messages" class="card-body overflow-auto small py-2" style="min-height:200px;"></div>
@@ -207,7 +274,7 @@
             var div = document.createElement('div');
             div.className = 'mb-2 ' + (role === 'user' ? 'text-end' : 'text-start');
             var bubble = document.createElement('div');
-            bubble.className = 'd-inline-block p-2 rounded small ' + (role === 'user' ? 'bg-primary text-white' : 'bg-light border text-dark');
+            bubble.className = 'd-inline-block p-2 small chat-bubble ' + (role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant');
             bubble.style.maxWidth = '92%';
             if (role === 'assistant') {
                 bubble.innerHTML = linkifyAssistantText(text);
@@ -223,7 +290,7 @@
                 panel.classList.remove('d-none');
                 if (!messages.dataset.ready) {
                     messages.dataset.ready = '1';
-                    appendBubble('assistant', 'Xin chào! Hỏi mình về sản phẩm gợi ý (dựa trên đồ thị; trả lời bằng Gemini khi đã cấu hình API key trên dịch vụ AI).');
+                    appendBubble('assistant', 'Xin chào! Hỏi mình về sản phẩm gợi ý hoặc tư vấn sản phẩm bạn cần biết');
                 }
             } else {
                 panel.classList.add('d-none');

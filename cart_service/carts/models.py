@@ -31,6 +31,7 @@ class CartItem(models.Model):
     
     cart = models.ForeignKey(Cart, related_name='items', on_delete=models.CASCADE)
     book_id = models.IntegerField()  # ID của book từ Book Service
+    variant_id = models.IntegerField(null=True, blank=True)
     quantity = models.IntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)  # Giá tại thời điểm thêm vào
     created_at = models.DateTimeField(auto_now_add=True)
@@ -38,7 +39,7 @@ class CartItem(models.Model):
     
     class Meta:
         db_table = 'cart_items'
-        unique_together = ['cart', 'book_id']
+        unique_together = ['cart', 'book_id', 'variant_id']
         ordering = ['-created_at']
     
     def __str__(self):

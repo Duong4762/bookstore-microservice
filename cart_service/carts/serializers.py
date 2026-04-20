@@ -8,11 +8,12 @@ class CartItemSerializer(serializers.ModelSerializer):
     
     subtotal = serializers.ReadOnlyField()
     book_title = serializers.SerializerMethodField()
+    variant_label = serializers.SerializerMethodField()
     
     class Meta:
         model = CartItem
-        fields = ['id', 'cart', 'book_id', 'quantity', 'price', 
-                  'subtotal', 'book_title', 'created_at', 'updated_at']
+        fields = ['id', 'cart', 'book_id', 'variant_id', 'quantity', 'price',
+                  'subtotal', 'book_title', 'variant_label', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_book_title(self, obj):
@@ -25,6 +26,11 @@ class CartItemSerializer(serializers.ModelSerializer):
         except Exception:
             pass
         return 'Unknown'
+
+    def get_variant_label(self, obj):
+        if not obj.variant_id:
+            return ''
+        return f'Variant #{obj.variant_id}'
     
     def validate_quantity(self, value):
         """Validate số lượng phải lớn hơn 0"""

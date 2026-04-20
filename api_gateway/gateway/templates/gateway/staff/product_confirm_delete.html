@@ -1,11 +1,15 @@
 {% extends "gateway/staff/base_staff.html" %}
-{% block title %}Xoa san pham{% endblock %}
+{% block title %}Xóa sản phẩm{% endblock %}
 {% block content %}
-<h1 class="h3 mb-3">Xoa san pham</h1>
-<p>Ban co chac muon xoa <strong>{{ product.name }}</strong> (ID {{ product.id }})? Thao tac khong hoan tac.</p>
-<form method="post">
+<div class="card border-danger-subtle shadow-sm">
+    <div class="card-body">
+        <h1 class="h3 mb-3 text-danger"><i class="bi bi-exclamation-triangle"></i> Xóa sản phẩm</h1>
+        <p class="mb-4">Bạn có chắc muốn xóa <strong>{{ product.name }}</strong> (ID {{ product.id }})? Thao tác này không thể hoàn tác.</p>
+        <form method="post" class="d-flex gap-2">
     {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Xoa vinh vien</button>
-    <a href="{% url 'staff_product_list' %}" class="btn btn-outline-secondary">Huy</a>
-</form>
+            <button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Xóa vĩnh viễn</button>
+            <a href="{% url 'staff_product_list' %}" class="btn btn-outline-secondary">Hủy</a>
+        </form>
+    </div>
+</div>
 {% endblock %}

@@ -3,19 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Nhan vien{% endblock %} — Product Store</title>
+    <title>{% block title %}Nhân viên{% endblock %} — Product Store</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            min-height: 100vh;
+            background: #f4f7fb;
+        }
+        .staff-navbar {
+            background: linear-gradient(120deg, #1f2937, #111827);
+        }
+        .staff-navbar .navbar-brand {
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+        .staff-navbar .nav-link {
+            border-radius: 0.5rem;
+            padding: 0.4rem 0.7rem;
+            color: rgba(255, 255, 255, 0.82) !important;
+        }
+        .staff-navbar .nav-link:hover {
+            color: #fff !important;
+            background: rgba(255, 255, 255, 0.12);
+        }
+        .staff-page {
+            padding-top: 1.2rem;
+            padding-bottom: 2rem;
+        }
+        .staff-surface {
+            background: #fff;
+            border-radius: 1rem;
+            border: 1px solid #e8edf7;
+            box-shadow: 0 0.35rem 1.4rem rgba(16, 24, 40, 0.05);
+            padding: 1.2rem;
+        }
+    </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body class="bg-light">
-<nav class="navbar navbar-dark bg-dark">
+<nav class="navbar navbar-dark staff-navbar">
     <div class="container">
-        <a class="navbar-brand" href="{% url 'staff_product_list' %}"><i class="bi bi-shield-lock"></i> Khu vuc nhan vien</a>
+        <a class="navbar-brand" href="{% url 'staff_product_list' %}"><i class="bi bi-shield-lock"></i> Khu vực nhân viên</a>
         <div class="navbar-nav flex-row gap-3">
-            <a class="nav-link text-white-50" href="{% url 'home' %}"><i class="bi bi-shop"></i> Cua hang</a>
+            <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-shop"></i> Cửa hàng</a>
             {% if request.session.staff_authenticated %}
-            <a class="nav-link text-white-50" href="{% url 'staff_logout' %}"><i class="bi bi-box-arrow-right"></i> Dang xuat</a>
+            <a class="nav-link" href="{% url 'staff_logout' %}"><i class="bi bi-box-arrow-right"></i> Đăng xuất</a>
             {% endif %}
         </div>
     </div>
@@ -30,8 +63,10 @@
     {% endfor %}
 </div>
 {% endif %}
-<main class="container py-4">
-    {% block content %}{% endblock %}
+<main class="container staff-page">
+    <div class="staff-surface">
+        {% block content %}{% endblock %}
+    </div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 {% block extra_js %}{% endblock %}

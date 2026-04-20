@@ -1,27 +1,47 @@
 {% extends "gateway/staff/base_staff.html" %}
-{% block title %}{% if mode == 'create' %}Them san pham{% else %}Sua san pham{% endif %}{% endblock %}
+{% block title %}{% if mode == 'create' %}Thêm sản phẩm{% else %}Sửa sản phẩm{% endif %}{% endblock %}
 {% block content %}
-<h1 class="h3 mb-4">{% if mode == 'create' %}Them mat hang{% else %}Sua mat hang #{{ product.id }}{% endif %}</h1>
+<h1 class="h3 mb-4">{% if mode == 'create' %}Thêm mặt hàng mới{% else %}Sửa mặt hàng #{{ product.id }}{% endif %}</h1>
 <form method="post" class="card shadow-sm">
     <div class="card-body">
         {% csrf_token %}
         <div class="row g-3">
             <div class="col-md-8">
-                <label class="form-label">Ten san pham</label>
+                <label class="form-label">Tên sản phẩm</label>
                 <input type="text" class="form-control" name="name" required
                        value="{% if product %}{{ product.name }}{% endif %}">
             </div>
             <div class="col-md-4">
-                <label class="form-label">Slug <span class="text-muted small">(de trong se tu tao)</span></label>
+                <label class="form-label">Slug <span class="text-muted small">(để trống sẽ tự tạo)</span></label>
                 <input type="text" class="form-control" name="slug"
                        value="{% if product %}{{ product.slug }}{% endif %}">
             </div>
             <div class="col-12">
-                <label class="form-label">Mo ta</label>
-                <textarea class="form-control" name="description" rows="3">{% if product %}{{ product.description }}{% endif %}</textarea>
+                <label class="form-label">Thuộc tính sản phẩm chính</label>
+                <div id="attributes-list" class="d-flex flex-column gap-2">
+                    {% for row in attribute_rows %}
+                    <div class="row g-2 attr-row">
+                        <div class="col-md-5">
+                            <input type="text" class="form-control bg-light" name="attribute_key[]" value="{{ row.key }}" readonly>
+                        </div>
+                        <div class="col-md-7">
+                            <input type="text" class="form-control" name="attribute_value[]" placeholder="Ví dụ: Intel Core Ultra 7" value="{{ row.value }}">
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="row g-2 attr-row">
+                        <div class="col-md-5">
+                            <input type="text" class="form-control bg-light" name="attribute_key[]" placeholder="Không có thuộc tính gợi ý" readonly>
+                        </div>
+                        <div class="col-md-7">
+                            <input type="text" class="form-control" name="attribute_value[]" placeholder="Giá trị thuộc tính">
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Danh muc</label>
+                <label class="form-label">Danh mục</label>
                 <select class="form-select" name="category_id" required>
                     {% for c in categories %}
                     <option value="{{ c.id }}"
@@ -32,7 +52,7 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Thuong hieu</label>
+                <label class="form-label">Thương hiệu</label>
                 <select class="form-select" name="brand_id" required>
                     {% for b in brands %}
                     <option value="{{ b.id }}"
@@ -43,11 +63,13 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Loai san pham</label>
-                <select class="form-select" name="product_type_id" required>
+                <label class="form-label">Loại sản phẩm</label>
+                <select class="form-select" id="product-type-select" name="product_type_id" required>
                     {% for t in product_types %}
                     <option value="{{ t.id }}"
-                      {% if product %}
+                      {% if selected_product_type_id %}
+                        {% if selected_product_type_id == t.id|stringformat:"s" %}selected{% endif %}
+                      {% elif product %}
                         {% if product.product_type_id == t.id %}selected{% endif %}
                       {% elif forloop.first %}selected{% endif %}>{{ t.name }}</option>
                     {% endfor %}
@@ -57,45 +79,168 @@
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" name="is_active" id="is_active"
                            {% if not product or product.is_active %}checked{% endif %}>
-                    <label class="form-check-label" for="is_active">Dang hien thi (active)</label>
+                    <label class="form-check-label" for="is_active">Đang hiển thị (active)</label>
                 </div>
             </div>
-            <hr class="my-2">
-            <div class="col-12"><h2 class="h6 text-muted">Bien the chinh (SKU / gia / ton)</h2></div>
-            <div class="col-md-4">
-                <label class="form-label">SKU</label>
-                <input type="text" class="form-control" name="sku"
-                       value="{% if primary_variant %}{{ primary_variant.sku }}{% endif %}">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Gia</label>
-                <input type="number" step="0.01" min="0" class="form-control" name="price" required
-                       value="{% if primary_variant %}{{ primary_variant.price }}{% else %}0{% endif %}">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Ton kho</label>
-                <input type="number" min="0" class="form-control" name="stock" required
-                       value="{% if primary_variant %}{{ primary_variant.stock }}{% else %}0{% endif %}">
-            </div>
-            <div class="col-12">
-                <label class="form-label">URL anh bia (tuy chon)</label>
-                <input type="url" class="form-control" name="cover_image_url"
-                       value="{% if primary_variant %}{{ primary_variant.cover_image_url }}{% endif %}">
-            </div>
-            {% if mode == 'edit' %}
-            <div class="col-12">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="variant_is_active" id="variant_is_active"
-                           {% if not primary_variant or primary_variant.is_active %}checked{% endif %}>
-                    <label class="form-check-label" for="variant_is_active">Bien the dang ban</label>
-                </div>
-            </div>
-            {% endif %}
         </div>
     </div>
     <div class="card-footer bg-white d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Luu</button>
-        <a href="{% url 'staff_product_list' %}" class="btn btn-outline-secondary">Quay lai</a>
+        <input type="hidden" name="action" value="save_main">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-floppy"></i> Lưu</button>
+        <a href="{% url 'staff_product_list' %}" class="btn btn-outline-secondary">Quay lại</a>
     </div>
 </form>
+{% if mode == 'edit' %}
+<div class="card shadow-sm mt-4">
+    <div class="card-body">
+        <h2 class="h5 mb-3">Danh sách biến thể</h2>
+        {% if can_manage_variants %}
+            <form method="post" class="row g-2 mb-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_variant">
+                <div class="col-md-3">
+                    <input type="text" class="form-control" name="variant_sku" placeholder="SKU" required>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" step="0.01" min="0" class="form-control" name="variant_price" placeholder="Giá" required>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" min="0" class="form-control" name="variant_stock" placeholder="Tồn kho" required>
+                </div>
+                <div class="col-md-5">
+                    <input type="text" class="form-control" name="variant_color" placeholder="Màu sắc">
+                </div>
+                <div class="col-md-5">
+                    <input type="text" class="form-control" name="variant_storage" placeholder="Dung lượng">
+                </div>
+                <div class="col-md-2">
+                    <input type="url" class="form-control" name="variant_cover_image_url" placeholder="URL ảnh (tùy chọn)">
+                </div>
+                <div class="col-md-3 d-grid">
+                    <button type="submit" class="btn btn-outline-primary">Thêm biến thể</button>
+                </div>
+            </form>
+            {% if variants_for_edit %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>SKU</th>
+                                <th>Giá</th>
+                                <th>Tồn kho</th>
+                                <th>Màu sắc</th>
+                                <th>Dung lượng</th>
+                                <th>Đang bán</th>
+                                <th class="text-end">Lưu</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sv in variants_for_edit %}
+                                <tr>
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="update_variant">
+                                        <input type="hidden" name="variant_id" value="{{ sv.id }}">
+                                        <td><input type="text" class="form-control form-control-sm" name="variant_sku" value="{{ sv.sku }}"></td>
+                                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="variant_price" value="{{ sv.price }}"></td>
+                                        <td><input type="number" min="0" class="form-control form-control-sm" name="variant_stock" value="{{ sv.stock }}"></td>
+                                        <td><input type="text" class="form-control form-control-sm" name="variant_color" value="{{ sv.color }}"></td>
+                                        <td><input type="text" class="form-control form-control-sm" name="variant_storage" value="{{ sv.storage }}"></td>
+                                        <td class="text-center"><input class="form-check-input" type="checkbox" name="variant_is_active" {% if sv.is_active %}checked{% endif %}></td>
+                                        <input type="hidden" name="variant_cover_image_url" value="{{ sv.cover_image_url }}">
+                                        <td class="text-end"><button type="submit" class="btn btn-sm btn-outline-success">Lưu</button></td>
+                                    </form>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">Chưa có biến thể.</p>
+            {% endif %}
+        {% else %}
+            <div class="alert alert-info mb-0">
+                Chỉ được tạo biến thể khi sản phẩm chính có thuộc tính màu sắc hoặc dung lượng.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{{ product_type_attr_map|json_script:"product-type-attr-map" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var list = document.getElementById('attributes-list');
+    var productTypeSelect = document.getElementById('product-type-select');
+    var requiredHint = document.getElementById('required-attributes-hint');
+    var mapNode = document.getElementById('product-type-attr-map');
+    var requiredMap = {};
+    if (mapNode && mapNode.textContent) {
+        try {
+            requiredMap = JSON.parse(mapNode.textContent);
+        } catch (e) {
+            requiredMap = {};
+        }
+    }
+    if (!list) return;
+
+    function currentValueMap() {
+        var values = {};
+        var rows = list.querySelectorAll('.attr-row');
+        rows.forEach(function (row) {
+            var keyInput = row.querySelector('input[name="attribute_key[]"]');
+            var valueInput = row.querySelector('input[name="attribute_value[]"]');
+            var k = keyInput ? (keyInput.value || '').trim() : '';
+            if (!k) return;
+            values[k] = valueInput ? valueInput.value : '';
+        });
+        return values;
+    }
+
+    function renderAttributeRows(keys, valueMap) {
+        list.innerHTML = '';
+        if (!keys.length) {
+            list.innerHTML =
+                '<div class="row g-2 attr-row">' +
+                '<div class="col-md-5"><input type="text" class="form-control bg-light" name="attribute_key[]" placeholder="Không có thuộc tính gợi ý" readonly></div>' +
+                '<div class="col-md-7"><input type="text" class="form-control" name="attribute_value[]" placeholder="Giá trị thuộc tính"></div>' +
+                '</div>';
+            return;
+        }
+        keys.forEach(function (key) {
+            var row = document.createElement('div');
+            row.className = 'row g-2 attr-row';
+            row.innerHTML =
+                '<div class="col-md-5"><input type="text" class="form-control bg-light" name="attribute_key[]" readonly></div>' +
+                '<div class="col-md-7"><input type="text" class="form-control" name="attribute_value[]"></div>';
+            row.querySelector('input[name="attribute_key[]"]').value = key;
+            row.querySelector('input[name="attribute_value[]"]').value = (valueMap && valueMap[key]) || '';
+            list.appendChild(row);
+        });
+    }
+
+    function renderRequiredHint() {
+        if (!productTypeSelect || !requiredHint) return;
+        var typeId = productTypeSelect.value || '';
+        var attrs = requiredMap[typeId] || [];
+        if (!attrs.length) {
+            requiredHint.innerHTML = 'Loại sản phẩm này chưa cấu hình danh sách thuộc tính gợi ý.';
+            return;
+        }
+        requiredHint.innerHTML = 'Gợi ý: ' + attrs.map(function (k) { return '<code>' + k + '</code>'; }).join(', ');
+    }
+
+    if (productTypeSelect) {
+        productTypeSelect.addEventListener('change', function () {
+            renderRequiredHint();
+            var valueMap = currentValueMap();
+            var attrs = requiredMap[productTypeSelect.value || ''] || [];
+            renderAttributeRows(attrs, valueMap);
+        });
+        renderRequiredHint();
+    }
+})();
+</script>
 {% endblock %}

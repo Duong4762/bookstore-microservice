@@ -19,7 +19,7 @@ class Payment(models.Model):
     ]
     
     order_id = models.IntegerField(unique=True)  # ID của order từ Order Service
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     transaction_id = models.CharField(max_length=100, blank=True, null=True)

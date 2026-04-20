@@ -173,6 +173,32 @@ def product_detail(request, product_id):
             product.setdefault('sku', primary_variant.get('sku'))
             if not product.get('cover_image_url'):
                 product['cover_image_url'] = primary_variant.get('cover_image_url')
+        # Chuẩn hóa danh sách biến thể để UI chọn khi thêm giỏ hàng
+        selectable_variants = []
+        for v in active_variants:
+            if not isinstance(v, dict):
+                continue
+            try:
+                vid = int(v.get('id'))
+            except (TypeError, ValueError):
+                continue
+            attrs = v.get('attributes') if isinstance(v.get('attributes'), dict) else {}
+            label_parts = []
+            if attrs.get('color'):
+                label_parts.append(f"Màu: {attrs.get('color')}")
+            if attrs.get('storage'):
+                label_parts.append(f"Dung lượng: {attrs.get('storage')}")
+            if not label_parts and v.get('sku'):
+                label_parts.append(f"SKU: {v.get('sku')}")
+            selectable_variants.append(
+                {
+                    'id': vid,
+                    'price': v.get('price'),
+                    'stock': int(v.get('stock') or 0),
+                    'label': ' | '.join(label_parts) if label_parts else f'Biến thể #{vid}',
+                }
+            )
+        product['selectable_variants'] = selectable_variants
     
     # Lấy đánh giá và thống kê
     ratings = RatingGatewayService.get_ratings_by_product(product_id)
@@ -272,7 +298,99 @@ def cart_view(request, customer_id):
     cart = CartGatewayService.get_cart_by_customer(customer_id)
     if not cart:
         messages.error(request, 'Không tìm thấy giỏ hàng')
-    
+
+    # Bổ sung thông tin sản phẩm từ product-service để tránh hiển thị "Unknown".
+    if isinstance(cart, dict):
+        items = cart.get('items', []) if isinstance(cart.get('items'), list) else []
+        product_ids = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            pid = item.get('product_id') or item.get('book_id')
+            try:
+                pid_int = int(pid)
+            except (TypeError, ValueError):
+                continue
+            if pid_int > 0:
+                product_ids.append(pid_int)
+
+        by_id = {}
+        for pid in sorted(set(product_ids)):
+            p = ProductCatalogGatewayService.get_product_by_id(pid)
+            if isinstance(p, dict):
+                by_id[pid] = p
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            pid = item.get('product_id') or item.get('book_id')
+            try:
+                pid_int = int(pid)
+            except (TypeError, ValueError):
+                pid_int = None
+
+            def _pick_title(*candidates):
+                for raw in candidates:
+                    text = (str(raw).strip() if raw is not None else '')
+                    if not text:
+                        continue
+                    if text.lower() == 'unknown':
+                        continue
+                    return text
+                return ''
+
+            # Fallback an toàn để template không phụ thuộc key có thể thiếu.
+            fallback_title = _pick_title(item.get('book_title'), item.get('product_title'))
+            item['display_name'] = fallback_title or f'Sản phẩm #{pid_int or "N/A"}'
+            item['display_product_id'] = pid_int or item.get('product_id') or item.get('book_id')
+            item['product_url'] = f"/products/{pid_int}/" if pid_int else '#'
+            item['cover_image_url'] = None
+            item['variant_display'] = ''
+            product = by_id.get(pid_int) if pid_int else None
+            if not product:
+                continue
+            item['display_name'] = _pick_title(
+                product.get('name'),
+                item.get('product_title'),
+                item.get('book_title'),
+            ) or f'Sản phẩm #{pid_int}'
+            item['display_product_id'] = pid_int
+            item['product_url'] = f"/products/{pid_int}/"
+            cover = product.get('cover_image_url')
+            if not cover:
+                variants = product.get('variants') if isinstance(product.get('variants'), list) else []
+                for v in variants:
+                    if isinstance(v, dict) and v.get('cover_image_url'):
+                        cover = v.get('cover_image_url')
+                        break
+            vid = item.get('variant_id')
+            if vid not in (None, '', 'null'):
+                try:
+                    vid_int = int(vid)
+                except (TypeError, ValueError):
+                    vid_int = None
+                if vid_int and isinstance(product.get('variants'), list):
+                    for v in product.get('variants') or []:
+                        if not isinstance(v, dict):
+                            continue
+                        try:
+                            cur_vid = int(v.get('id'))
+                        except (TypeError, ValueError):
+                            continue
+                        if cur_vid != vid_int:
+                            continue
+                        attrs = v.get('attributes') if isinstance(v.get('attributes'), dict) else {}
+                        parts = []
+                        if attrs.get('color'):
+                            parts.append(f"Màu: {attrs.get('color')}")
+                        if attrs.get('storage'):
+                            parts.append(f"Dung lượng: {attrs.get('storage')}")
+                        if not parts and v.get('sku'):
+                            parts.append(f"SKU: {v.get('sku')}")
+                        item['variant_display'] = ' | '.join(parts) if parts else f'Biến thể #{vid_int}'
+                        break
+            item['cover_image_url'] = cover
+
     return render(request, 'gateway/cart.html', {
         'cart': cart,
         'customer_id': customer_id
@@ -295,9 +413,14 @@ def add_to_cart(request, product_id):
             messages.warning(request, 'Vui lòng đăng nhập khách hàng trước khi thêm vào giỏ.')
             return redirect('customer_account_login')
         quantity = int(request.POST.get('quantity', 1))
+        raw_variant = request.POST.get('variant_id')
+        try:
+            variant_id = int(raw_variant) if raw_variant not in (None, '', 'null') else None
+        except (TypeError, ValueError):
+            variant_id = None
         
         success, message = CartGatewayService.add_item_to_cart(
-            customer_id, product_id, quantity
+            customer_id, product_id, quantity, variant_id=variant_id
         )
         
         if success:
@@ -310,7 +433,10 @@ def add_to_cart(request, product_id):
                 quantity=quantity,
                 source_page=request.path,
             )
-            messages.success(request, message)
+            if variant_id:
+                messages.success(request, f'{message} (biến thể #{variant_id})')
+            else:
+                messages.success(request, message)
         else:
             messages.error(request, message)
     
