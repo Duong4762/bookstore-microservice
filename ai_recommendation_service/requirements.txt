@@ -7,11 +7,11 @@ django-redis>=5.4
 # DB (production)
 psycopg2-binary>=2.9
 
-# Graph / ML
-networkx>=3.2
-# Torch CPU wheels in this image work reliably with NumPy 1.x.
+# ML
 numpy>=1.26,<2
-faiss-cpu>=1.7.4
+pandas>=2.2
+scikit-learn>=1.5
+tensorflow-cpu>=2.17,<2.19
 
 # HTTP
 requests>=2.31

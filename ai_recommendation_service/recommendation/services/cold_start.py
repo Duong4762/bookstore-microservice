@@ -11,6 +11,7 @@ from typing import List, Set
 from django.db.models import Count
 
 from tracking.models import EventLog
+from .product_groups import ALL_PRODUCT_IDS
 
 
 def popular_product_ids(limit: int = 20) -> List[int]:
@@ -31,6 +32,8 @@ def popular_product_ids(limit: int = 20) -> List[int]:
     seen: Set[int] = set()
     for row in qs:
         pid = row['product_id']
+        if pid not in ALL_PRODUCT_IDS:
+            continue
         if pid in seen:
             continue
         seen.add(pid)
@@ -103,4 +106,12 @@ def cold_start_recommendations(user_id: int, top_k: int, exclude: Set[int]) -> L
             out.append(pid)
             if len(out) >= top_k:
                 return out
+    if len(out) < top_k:
+        for pid in ALL_PRODUCT_IDS:
+            if pid in seen:
+                continue
+            seen.add(pid)
+            out.append(pid)
+            if len(out) >= top_k:
+                break
     return out

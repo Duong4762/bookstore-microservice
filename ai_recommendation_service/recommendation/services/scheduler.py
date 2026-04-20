@@ -29,7 +29,7 @@ def _loop() -> None:
     logger.info('Auto-retrain scheduler started (interval=%ss)', interval)
     while True:
         time.sleep(interval)
-        started = trigger_retrain_async(trigger='hourly_scheduler')
+        started = trigger_retrain_async(trigger='daily_scheduler')
         if started:
             logger.info('Auto-retrain kicked off.')
         else:
