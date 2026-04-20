@@ -11,11 +11,13 @@ from rest_framework.views import APIView
 from catalog_proxy.client import get_products_bulk
 
 from ..services.cold_start import popular_product_ids
+from ..services.chat_rag import chat_with_rag
 from ..services.embedding_cache import UserEmbeddingCache
 from ..services.inference import RecommendEngine
 from ..services.retrain_runtime import retrain_status, trigger_retrain_async
 
 from .serializers import (
+    ChatMessageSerializer,
     InvalidateSerializer,
     RecommendPostSerializer,
     RecommendQuerySerializer,
@@ -127,3 +129,32 @@ class InvalidateCacheView(APIView):
         uid = ser.validated_data['user_id']
         UserEmbeddingCache.invalidate(uid)
         return Response({'status': 'ok', 'user_id': uid})
+
+
+class ChatRagView(APIView):
+    """POST /api/chat/ — Gemini + retrieval from catalog + recommendation."""
+
+    def post(self, request):
+        ser = ChatMessageSerializer(data=request.data)
+        if not ser.is_valid():
+            return Response({'errors': ser.errors}, status=status.HTTP_400_BAD_REQUEST)
+        data = ser.validated_data
+        clean_history = []
+        for h in (data.get('history') or [])[-10:]:
+            if not isinstance(h, dict):
+                continue
+            role = (h.get('role') or '').strip()
+            content = (h.get('content') or '').strip()
+            if role in ('user', 'assistant') and content:
+                clean_history.append({'role': role, 'content': content[:4000]})
+        try:
+            out = chat_with_rag(
+                message=data['message'].strip(),
+                user_id=data.get('user_id'),
+                history=clean_history,
+                include_context=bool(data.get('include_context')),
+            )
+            return Response(out)
+        except Exception as exc:
+            logger.error('chat rag failed: %s', exc, exc_info=True)
+            return Response({'error': 'chat_failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

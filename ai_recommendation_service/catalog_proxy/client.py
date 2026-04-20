@@ -48,3 +48,35 @@ def get_products_bulk(product_ids: List[int]) -> Dict[int, Dict]:
     return result
 
 
+def list_products(
+    *,
+    search: str = '',
+    category_id: Optional[int] = None,
+    brand_id: Optional[int] = None,
+    in_stock: Optional[bool] = None,
+    limit: int = 50,
+) -> List[Dict]:
+    """Query product list endpoint for RAG retrieval."""
+    params: Dict[str, str] = {}
+    if search.strip():
+        params['search'] = search.strip()[:200]
+    if category_id:
+        params['category_id'] = str(category_id)
+    if brand_id:
+        params['brand_id'] = str(brand_id)
+    if in_stock is True:
+        params['in_stock'] = 'true'
+    url = f"{settings.PRODUCT_SERVICE_URL}/api/products/"
+    try:
+        resp = requests.get(url, params=params, timeout=1.5)
+        resp.raise_for_status()
+        body = resp.json()
+        rows = body.get('results', body) if isinstance(body, dict) else body
+        if not isinstance(rows, list):
+            return []
+        return rows[: max(1, min(limit, 200))]
+    except Exception as exc:
+        logger.debug('Failed to list products via catalog proxy: %s', exc)
+        return []
+
+

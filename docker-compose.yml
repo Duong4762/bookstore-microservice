@@ -192,6 +192,9 @@ services:
       - POSTGRES_PORT=5432
       - GEMINI_API_KEY=${GEMINI_API_KEY:-AIzaSyDXpI9lUOFilhIM3BZKxZUCmC1wJhd55pk}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - NEO4J_HTTP_URL=${NEO4J_HTTP_URL:-http://neo4j:7474}
+      - NEO4J_USERNAME=${NEO4J_USERNAME:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
       # URL công khai của API Gateway (vd: http://localhost:8000) để chat in link đầy đủ; để trống = chỉ /products/{id}/
       - CHAT_STORE_BASE_URL=${CHAT_STORE_BASE_URL:-http://localhost:8000}
     depends_on:
@@ -202,7 +205,7 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    command: sh -c "python manage.py migrate --settings=config.settings.dev && python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev"
+    command: sh -c "python manage.py migrate --settings=config.settings.dev && python manage.py bootstrap_recommendation --settings=config.settings.dev && python manage.py runserver 0.0.0.0:8000 --settings=config.settings.dev"
 
   # ── PostgreSQL (all Django services) ───────────────────────────────────────
   postgres:

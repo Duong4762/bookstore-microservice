@@ -206,6 +206,15 @@ def product_detail(request, product_id):
     
     customer_id = _current_customer_id(request)
     if customer_id:
+        # Ghi nhận "click" vào sản phẩm (tương ứng action=click trong dataset mẫu).
+        RecommendationGatewayService.track_event(
+            user_id=customer_id,
+            session_id=_tracking_session_id(request, customer_id),
+            event_type='product_click',
+            product_id=product_id,
+            quantity=1,
+            source_page=request.path,
+        )
         RecommendationGatewayService.track_event(
             user_id=customer_id,
             session_id=_tracking_session_id(request, customer_id),
@@ -457,24 +466,9 @@ def create_order(request):
             'phone_number': request.POST.get('phone_number'),
             'notes': request.POST.get('notes', '')
         }
-        cart = CartGatewayService.get_cart_by_customer(customer_id) or {}
-        purchase_items = cart.get('items', []) if isinstance(cart, dict) else []
         
         success, order_data, message = OrderGatewayService.create_order(data)
         if success:
-            session_id = _tracking_session_id(request, customer_id)
-            for item in purchase_items:
-                pid = item.get('book_id') or item.get('product_id')
-                if not pid:
-                    continue
-                RecommendationGatewayService.track_event(
-                    user_id=customer_id,
-                    session_id=session_id,
-                    event_type='purchase',
-                    product_id=int(pid),
-                    quantity=int(item.get('quantity') or 1),
-                    source_page=request.path,
-                )
             messages.success(request, message)
             return redirect('order_detail', order_id=order_data['id'])
         else:

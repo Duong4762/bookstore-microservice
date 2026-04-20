@@ -6,8 +6,8 @@ Seed này tạo:
 - 15 categories
 - 20 brands
 - 12 product types
-- 60 products
-- 62 variants
+- 300 products (20 nhóm x 15 ID liên tiếp)
+- 300 variants (1 variant / product)
 
 ## Chạy trong Docker (khuyến nghị)
 

@@ -101,6 +101,12 @@ if _has_django_redis:
     }
 
 PRODUCT_SERVICE_URL = os.environ.get('PRODUCT_SERVICE_URL', 'http://localhost:8002')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+CHAT_STORE_BASE_URL = os.environ.get('CHAT_STORE_BASE_URL', '').rstrip('/')
+NEO4J_HTTP_URL = os.environ.get('NEO4J_HTTP_URL', 'http://neo4j:7474')
+NEO4J_USERNAME = os.environ.get('NEO4J_USERNAME', 'neo4j')
+NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'password')
 
 ARTIFACTS_DIR = BASE_DIR / 'ml' / 'artifacts'
 RECOMMENDATION_ML = {

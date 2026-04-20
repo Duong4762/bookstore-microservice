@@ -4,6 +4,7 @@ Usage: python manage.py seed_products --settings=config.settings.dev
 """
 from django.core.management.base import BaseCommand
 from decimal import Decimal
+from django.db import transaction
 from modules.catalog.infrastructure.models import (
     ProductModel, VariantModel, CategoryModel, BrandModel, ProductTypeModel
 )
@@ -13,138 +14,91 @@ class Command(BaseCommand):
     help = 'Seed sample products with variants'
 
     def handle(self, *args, **options):
-        # Ensure prerequisites exist
-        kn_cat, _ = CategoryModel.objects.get_or_create(
-            slug='ky-nang-song', defaults={'name': 'Kỹ năng sống'}
-        )
-        van_cat, _ = CategoryModel.objects.get_or_create(
-            slug='van-hoc', defaults={'name': 'Văn học'}
-        )
-        nxb_tre, _ = BrandModel.objects.get_or_create(
-            slug='nxb-tre', defaults={'name': 'NXB Trẻ'}
-        )
-        nxb_kim_dong, _ = BrandModel.objects.get_or_create(
-            slug='nxb-kim-dong', defaults={'name': 'NXB Kim Đồng'}
-        )
-        book_type, _ = ProductTypeModel.objects.get_or_create(
-            name='Sách bìa mềm',
-            defaults={'required_attributes': ['author', 'isbn', 'pages', 'language']}
-        )
+        categories = {c.id: c for c in CategoryModel.objects.filter(id__in=[2, 3, 4, 6, 7, 11, 13])}
+        brands = {b.id: b for b in BrandModel.objects.filter(id__in=[2, 4, 9, 12, 14, 19, 20])}
+        product_types = {pt.id: pt for pt in ProductTypeModel.objects.filter(id__in=[1, 2, 3, 5, 6, 7, 11])}
 
-        products = [
-            {
-                'name': 'Đắc Nhân Tâm',
-                'slug': 'dac-nhan-tam',
-                'description': 'Cuốn sách kỹ năng sống bán chạy nhất mọi thời đại.',
-                'category': kn_cat,
-                'brand': nxb_tre,
-                'product_type': book_type,
-                'attributes': {
-                    'author': 'Dale Carnegie',
-                    'isbn': '978-604-1-24321-0',
-                    'pages': 320,
-                    'language': 'Vietnamese',
-                    'publication_year': 2023,
-                },
-                'variants': [
-                    {'sku': 'DACN-0001', 'price': Decimal('80000'), 'stock': 50},
-                ],
-            },
-            {
-                'name': 'Nhà Giả Kim',
-                'slug': 'nha-gia-kim',
-                'description': 'Tiểu thuyết triết học về hành trình khám phá bản thân.',
-                'category': van_cat,
-                'brand': nxb_tre,
-                'product_type': book_type,
-                'attributes': {
-                    'author': 'Paulo Coelho',
-                    'isbn': '978-604-1-24322-7',
-                    'pages': 228,
-                    'language': 'Vietnamese',
-                    'publication_year': 2022,
-                },
-                'variants': [
-                    {'sku': 'NHAG-0001', 'price': Decimal('75000'), 'stock': 30},
-                ],
-            },
-            {
-                'name': 'Tư Duy Nhanh Và Chậm',
-                'slug': 'tu-duy-nhanh-va-cham',
-                'description': 'Khám phá hai hệ thống tư duy điều khiển cách chúng ta nghĩ.',
-                'category': kn_cat,
-                'brand': nxb_tre,
-                'product_type': book_type,
-                'attributes': {
-                    'author': 'Daniel Kahneman',
-                    'isbn': '978-604-1-24323-4',
-                    'pages': 512,
-                    'language': 'Vietnamese',
-                    'publication_year': 2023,
-                },
-                'variants': [
-                    {'sku': 'TUDU-0001', 'price': Decimal('120000'), 'stock': 20},
-                    {'sku': 'TUDU-0002-HB', 'price': Decimal('150000'), 'stock': 10,
-                     'attributes': {'edition': 'hardcover'}},
-                ],
-            },
-            {
-                'name': 'Sapiens: Lược Sử Loài Người',
-                'slug': 'sapiens-luoc-su-loai-nguoi',
-                'description': 'Hành trình 70.000 năm của con người từ thời tiền sử đến hiện đại.',
-                'category': kn_cat,
-                'brand': nxb_tre,
-                'product_type': book_type,
-                'attributes': {
-                    'author': 'Yuval Noah Harari',
-                    'isbn': '978-604-1-24324-1',
-                    'pages': 575,
-                    'language': 'Vietnamese',
-                    'publication_year': 2023,
-                },
-                'variants': [
-                    {'sku': 'SAPI-0001', 'price': Decimal('135000'), 'stock': 15},
-                ],
-            },
-            {
-                'name': 'Doraemon Tập 1',
-                'slug': 'doraemon-tap-1',
-                'description': 'Bộ truyện tranh Doraemon nổi tiếng.',
-                'category': van_cat,
-                'brand': nxb_kim_dong,
-                'product_type': book_type,
-                'attributes': {
-                    'author': 'Fujiko F. Fujio',
-                    'isbn': '978-604-9-53001-5',
-                    'pages': 192,
-                    'language': 'Vietnamese',
-                    'publication_year': 2021,
-                },
-                'variants': [
-                    {'sku': 'DORA-0001', 'price': Decimal('25000'), 'stock': 100},
-                ],
-            },
+        missing = []
+        if len(categories) < 7:
+            missing.append('categories id 2,3,4,6,7,11,13')
+        if len(brands) < 7:
+            missing.append('brands id 2,4,9,12,14,19,20')
+        if len(product_types) < 7:
+            missing.append('product_types id 1,2,3,5,6,7,11')
+        if missing:
+            self.stdout.write(self.style.ERROR(f'Thiếu dữ liệu nền: {", ".join(missing)}'))
+            self.stdout.write(self.style.WARNING('Hãy chạy sql/seed_products.sql trước.'))
+            return
+
+        # (group_name, category_id, brand_id, product_type_id)
+        groups = [
+            ('phone', 3, 2, 2),
+            ('case', 7, 19, 7),
+            ('charger', 7, 19, 7),
+            ('laptop', 2, 4, 1),
+            ('mouse', 7, 12, 7),
+            ('keyboard', 7, 12, 7),
+            ('headphone', 6, 9, 5),
+            ('tablet', 4, 2, 3),
+            ('tshirt', 13, 14, 6),
+            ('shirt', 13, 14, 6),
+            ('jacket', 13, 14, 6),
+            ('jeans', 13, 14, 6),
+            ('shorts', 13, 14, 6),
+            ('shoes', 13, 14, 6),
+            ('sandals', 13, 14, 6),
+            ('bag', 7, 12, 7),
+            ('backpack', 7, 12, 7),
+            ('hat', 7, 12, 7),
+            ('watch', 11, 20, 11),
+            ('glasses', 7, 12, 7),
         ]
 
         created_products = 0
         created_variants = 0
 
-        for p_data in products:
-            variants_data = p_data.pop('variants')
-            product, was_created = ProductModel.objects.get_or_create(
-                slug=p_data['slug'], defaults=p_data
-            )
-            if was_created:
-                created_products += 1
+        with transaction.atomic():
+            for group_idx, (group_name, category_id, brand_id, product_type_id) in enumerate(groups, start=1):
+                category = categories[category_id]
+                brand = brands[brand_id]
+                product_type = product_types[product_type_id]
 
-            for v_data in variants_data:
-                v_attrs = v_data.pop('attributes', {})
-                variant, v_created = VariantModel.objects.get_or_create(
-                    sku=v_data['sku'],
-                    defaults={**v_data, 'product': product, 'attributes': v_attrs}
-                )
-                if v_created:
-                    created_variants += 1
+                for slot in range(1, 16):
+                    product_id = (group_idx - 1) * 15 + slot
+                    slug = f'{group_name}-product-{slot:02d}'
+                    product, was_created = ProductModel.objects.get_or_create(
+                        id=product_id,
+                        defaults={
+                            'name': f'{group_name.title()} Product {slot:02d}',
+                            'slug': slug,
+                            'description': f'Auto generated {group_name} item #{slot} (group {group_idx}).',
+                            'category': category,
+                            'brand': brand,
+                            'product_type': product_type,
+                            'attributes': {
+                                'group': group_name,
+                                'group_index': group_idx,
+                                'slot': slot,
+                                'seed_profile': 'ai-compatible-300',
+                            },
+                        },
+                    )
+                    if was_created:
+                        created_products += 1
+
+                    _, v_created = VariantModel.objects.get_or_create(
+                        sku=f'SKU-{product_id:04d}',
+                        defaults={
+                            'product': product,
+                            'price': Decimal(str(199000 + product_id * 1000)),
+                            'stock': 20 + (product_id % 40),
+                            'attributes': {
+                                'seed_profile': 'ai-compatible-300',
+                            },
+                        },
+                    )
+                    if v_created:
+                        created_variants += 1
 
         self.stdout.write(self.style.SUCCESS(
             f'✓ Đã tạo {created_products} products, {created_variants} variants'
